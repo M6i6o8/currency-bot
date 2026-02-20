@@ -1,0 +1,20 @@
+{
+  "5799391012": [
+    {
+      "pair": "BTC/USD",
+      "target": 67580.0,
+      "active": true,
+      "created": "15:41:33"
+    }
+  ],
+  "5269275311": [
+    {
+      "pair": "USD/RUB",
+      "target_price": 77.0,
+      "active": true,
+      "created_at": "14:33:09",
+      "target": 77.0,
+      "created": "14:33:09"
+    }
+  ]
+}

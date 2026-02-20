@@ -1,0 +1,7 @@
+cd C:\Users\Ноутбук II\Desktop\my_script
+
+python currency_bot.py public
+python currency_bot.py private
+
+@userinfobot
+
