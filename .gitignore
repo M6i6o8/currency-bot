@@ -1,0 +1,5 @@
+.env
+*.log
+__pycache__/
+*.pyc
+user_alerts.json
