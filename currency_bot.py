@@ -586,9 +586,35 @@ class CurrencyMonitor:
                 await asyncio.sleep(5)
     
     async def health_check(self, request):
-        """Эндпоинт для проверки здоровья - минимальный ответ без тела"""
-        # 204 No Content - вообще без тела ответа
-        return web.Response(status=204)
+        """Эндпоинт для проверки здоровья - минимальный ответ"""
+        return web.Response(text="OK")
+    
+    async def self_ping_task(self):
+        """Пинает сам себя каждые 4 минуты, чтобы Render не засыпал"""
+        while True:
+            try:
+                # Ждём 4 минуты
+                await asyncio.sleep(240)  # 240 секунд = 4 минуты
+                
+                # Получаем URL сервиса из переменной окружения Render
+                render_url = os.environ.get('RENDER_EXTERNAL_URL')
+                if not render_url:
+                    # Если не на Render'е, используем localhost (для тестов)
+                    render_url = "http://localhost:8080"
+                
+                # Пингуем свой же health-эндпоинт
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"{render_url}/health", timeout=30) as response:
+                        if response.status == 200:
+                            logger.info("✅ Самопинг успешен")
+                        else:
+                            logger.warning(f"⚠️ Самопинг вернул {response.status}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"❌ Ошибка самопинга: {e}")
+                # Продолжаем цикл даже при ошибке
+                continue
     
     async def run(self):
         """Запускает бота и веб-сервер для пинга"""
@@ -613,10 +639,11 @@ class CurrencyMonitor:
         logger.info(f"🌐 Веб-сервер для пинга запущен на порту {port}")
         
         try:
-            # Запускаем основные задачи бота
+            # Запускаем все задачи параллельно
             await asyncio.gather(
                 self.check_rates_task(interval=10),
-                self.check_commands_task(interval=2)
+                self.check_commands_task(interval=2),
+                self.self_ping_task()  # Добавили самопинг
             )
         except KeyboardInterrupt:
             logger.info("⏹ Остановлено")
