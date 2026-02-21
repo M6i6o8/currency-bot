@@ -20,10 +20,10 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    5799391012,  # Замени на свой ID
+    123456789,  # Замени на свой ID
 ]
 
-DEFAULT_MODE = "private"
+DEFAULT_MODE = "public"
 # ============================
 
 if len(sys.argv) > 1:
@@ -586,13 +586,9 @@ class CurrencyMonitor:
                 await asyncio.sleep(5)
     
     async def health_check(self, request):
-        """Эндпоинт для проверки здоровья"""
-        return web.json_response({
-            "status": "alive",
-            "time": datetime.now().isoformat(),
-            "users": len(user_alerts),
-            "uptime": "ok"
-        })
+        """Эндпоинт для проверки здоровья - минимальный ответ"""
+        # Просто возвращаем OK, без данных
+        return web.Response(text="OK", status=200)
     
     async def run(self):
         """Запускает бота и веб-сервер для пинга"""
