@@ -586,9 +586,9 @@ class CurrencyMonitor:
                 await asyncio.sleep(5)
     
     async def health_check(self, request):
-        """Эндпоинт для проверки здоровья - максимально минимальный"""
-        # Просто OK, без ничего
-        return web.Response(text="OK")
+        """Эндпоинт для проверки здоровья - минимальный ответ без тела"""
+        # 204 No Content - вообще без тела ответа
+        return web.Response(status=204)
     
     async def run(self):
         """Запускает бота и веб-сервер для пинга"""
