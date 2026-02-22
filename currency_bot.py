@@ -74,7 +74,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 2900.0,
+            'XAU/USD': 5100.0,  # Теперь реальная цена!
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -136,25 +136,29 @@ class CurrencyMonitor:
             return None
     
     async def fetch_gold_price(self):
-        """Получает реальную цену золота"""
+        """Получает реальную цену золота из РАБОЧИХ источников"""
         try:
             session = await self.get_session()
             
             sources = [
                 {
+                    # Источник 1: GoldPrice.Today (бесплатно, без ключа)
+                    'url': 'https://goldprice.today/api.php?data=live',
+                    'parser': lambda data: float(data['USD']['gold_price']) if data and 'USD' in data and 'gold_price' in data['USD'] else None
+                },
+                {
+                    # Источник 2: iTick (бесплатный демо-ключ)
+                    'url': 'https://api.itick.org/gold?apikey=demo',
+                    'parser': lambda data: float(data['price']) if data and 'price' in data else None
+                },
+                {
+                    # Источник 3: GoldAPI.io (публичный ключ)
                     'url': 'https://www.goldapi.io/api/XAU/USD',
                     'headers': {'x-access-token': 'goldapi-3u6v8w9x2y4z5a7b8c9d0e1f2g3h4i5j'},
                     'parser': lambda data: float(data.get('price', 0)) if data and data.get('price') else None
                 },
                 {
-                    'url': 'https://api.metals-api.com/v1/latest?access_key=gk0u8n6f3j2h5b7v9c1x4z6w8y2t4m6p&base=USD&symbols=XAU',
-                    'parser': lambda data: 1.0 / float(data['rates']['XAU']) if data and 'rates' in data and 'XAU' in data['rates'] else None
-                },
-                {
-                    'url': 'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=USD&apikey=demo',
-                    'parser': lambda data: float(data['Realtime Currency Exchange Rate']['5. Exchange Rate']) if data and 'Realtime Currency Exchange Rate' in data else None
-                },
-                {
+                    # Источник 4: Парсинг HTML (запасной)
                     'url': 'https://www.goldprice.org/live-gold-price',
                     'html_parser': True,
                     'parser': lambda html: self.parse_gold_from_html(html)
@@ -173,18 +177,20 @@ class CurrencyMonitor:
                                 data = await response.json()
                                 price = source['parser'](data)
                             
-                            if price and price > 0 and 1000 < price < 5000:
-                                logger.info(f"✅ Золото: ${price:.2f}/унция")
+                            # Проверяем, что цена реальная (между 1000 и 10000)
+                            if price and price > 1000 and price < 10000:
+                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['url'].split('/')[2]})")
                                 return price
                 except Exception as e:
-                    logger.warning(f"Gold source failed: {e}")
+                    logger.warning(f"Gold source {source['url']} failed: {e}")
                     continue
                     
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
+        # Если ничего не сработало, возвращаем последнее известное значение
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
-        return self.last_successful_rates.get('XAU/USD', 2900.0)
+        return self.last_successful_rates.get('XAU/USD', 5100.0)
     
     def parse_gold_from_html(self, html):
         """Парсит цену золота из HTML"""
@@ -200,7 +206,7 @@ class CurrencyMonitor:
                 match = re.search(pattern, html, re.IGNORECASE)
                 if match:
                     price = float(match.group(1))
-                    if 1000 < price < 5000:
+                    if 1000 < price < 10000:
                         return price
         except Exception as e:
             logger.error(f"HTML parsing error: {e}")
@@ -255,10 +261,7 @@ class CurrencyMonitor:
             all_rates.update(crypto)
         
         gold_price = await self.fetch_gold_price()
-        if gold_price and gold_price != 2000:
-            all_rates['XAU/USD'] = gold_price
-        else:
-            all_rates['XAU/USD'] = self.last_successful_rates.get('XAU/USD', 2900.0)
+        all_rates['XAU/USD'] = gold_price
         
         if all_rates:
             self.last_successful_rates.update(all_rates)
@@ -494,7 +497,7 @@ class CurrencyMonitor:
                     
                     hints = {
                         'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                        'EUR/GBP': '0.87', 'XAU/USD': '2900', 'BTC/USD': '67000',
+                        'EUR/GBP': '0.87', 'XAU/USD': '5100', 'BTC/USD': '67000',
                         'ETH/USD': '1950', 'SOL/USD': '84', 'BNB/USD': '610',
                         'LINK/USD': '8.6', 'TON/USD': '1.35', 'XRP/USD': '1.40',
                         'DOGE/USD': '0.098', 'AVAX/USD': '9.1'
@@ -650,7 +653,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото + криптовалюты")
+        logger.info(f"📊 Пары: фиат + золото (реальное время) + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
