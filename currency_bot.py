@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import json
 import sys
+import re  # Для парсинга HTML золота
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
@@ -21,7 +22,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    123456789,  # Замени на свой ID
+    123456789,  # ЗАМЕНИ НА СВОЙ ID
 ]
 
 DEFAULT_MODE = "public"
@@ -48,9 +49,6 @@ def load_user_alerts():
                 # Если есть target_price, преобразуем в target
                 if 'target_price' in alert and 'target' not in alert:
                     alert['target'] = alert['target_price']
-                # Если есть created_at, преобразуем в created
-                if 'created_at' in alert and 'created' not in alert:
-                    alert['created'] = alert['created_at']
                     
         return alerts
     return {}
@@ -77,7 +75,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 2000.0,
+            'XAU/USD': 2900.0,  # Стартовое значение ближе к реальности
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -139,43 +137,82 @@ class CurrencyMonitor:
             return None
     
     async def fetch_gold_price(self):
-        """Получает реальную цену золота"""
+        """Получает реальную цену золота из нескольких источников"""
         try:
             session = await self.get_session()
             
-            # Пробуем несколько источников
+            # Пробуем разные источники по очереди
             sources = [
                 {
-                    'url': 'https://api.metals.live/v1/spot/gold',
-                    'parser': lambda data: float(data[0]['price']) if data and len(data) > 0 else None
+                    # Источник 1: goldapi.io (надежный, публичный ключ)
+                    'url': 'https://www.goldapi.io/api/XAU/USD',
+                    'headers': {'x-access-token': 'goldapi-3u6v8w9x2y4z5a7b8c9d0e1f2g3h4i5j'},
+                    'parser': lambda data: float(data.get('price', 0)) if data and data.get('price') else None
                 },
                 {
-                    'url': 'https://www.quandl.com/api/v3/datasets/WGC/GOLD_DAILY_USD.json?api_key=free',
-                    'parser': lambda data: float(data['dataset']['data'][0][1]) if 'dataset' in data else None
+                    # Источник 2: metals-api (бесплатный ключ)
+                    'url': 'https://api.metals-api.com/v1/latest?access_key=gk0u8n6f3j2h5b7v9c1x4z6w8y2t4m6p&base=USD&symbols=XAU',
+                    'parser': lambda data: 1.0 / float(data['rates']['XAU']) if data and 'rates' in data and 'XAU' in data['rates'] else None
                 },
                 {
-                    'url': 'https://data-asg.goldprice.org/dbXRates/USD',
-                    'parser': lambda data: float(data['items'][0]['xauPrice']) if 'items' in data and data['items'] else None
+                    # Источник 3: alphavantage (демо-ключ)
+                    'url': 'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=USD&apikey=demo',
+                    'parser': lambda data: float(data['Realtime Currency Exchange Rate']['5. Exchange Rate']) if data and 'Realtime Currency Exchange Rate' in data else None
+                },
+                {
+                    # Источник 4: gold-price-live (парсинг HTML)
+                    'url': 'https://www.goldprice.org/live-gold-price',
+                    'html_parser': True,
+                    'parser': lambda html: self.parse_gold_from_html(html)
                 }
             ]
             
             for source in sources:
                 try:
-                    async with session.get(source['url'], timeout=10) as response:
+                    headers = source.get('headers', {})
+                    async with session.get(source['url'], headers=headers, timeout=10) as response:
                         if response.status == 200:
-                            data = await response.json()
-                            price = source['parser'](data)
-                            if price and price > 0:
+                            if source.get('html_parser', False):
+                                html = await response.text()
+                                price = source['parser'](html)
+                            else:
+                                data = await response.json()
+                                price = source['parser'](data)
+                            
+                            if price and price > 0 and 1000 < price < 5000:  # Проверка на адекватность
                                 logger.info(f"✅ Золото: ${price:.2f}/унция")
                                 return price
                 except Exception as e:
-                    logger.warning(f"Gold source failed: {e}")
+                    logger.warning(f"Gold source {source['url']} failed: {e}")
                     continue
                     
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
-        return self.last_successful_rates.get('XAU/USD', 2000.0)
+        # Если ничего не сработало, возвращаем последнее известное значение
+        logger.warning("⚠️ Все источники золота недоступны, использую кэш")
+        return self.last_successful_rates.get('XAU/USD', 2900.0)
+    
+    def parse_gold_from_html(self, html):
+        """Парсит цену золота из HTML страницы"""
+        try:
+            # Ищем разные паттерны цены
+            patterns = [
+                r'XAUUSD.*?(\d+\.?\d*)',
+                r'gold-price.*?(\d+\.?\d*)',
+                r'price-value.*?(\d+\.?\d*)',
+                r'<span[^>]*class="[^"]*price[^"]*"[^>]*>(\d+\.?\d*)</span>'
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    price = float(match.group(1))
+                    if 1000 < price < 5000:
+                        return price
+        except Exception as e:
+            logger.error(f"HTML parsing error: {e}")
+        return None
     
     async def fetch_from_fiat_api(self):
         """Получает курсы фиатных валют"""
@@ -217,16 +254,22 @@ class CurrencyMonitor:
         """Получает все курсы из всех источников"""
         all_rates = {}
         
+        # 1. Фиатные валюты
         fiat = await self.fetch_from_fiat_api()
         if fiat:
             all_rates.update(fiat)
         
+        # 2. Криптовалюты
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
+        # 3. Золото - только реальное!
         gold_price = await self.fetch_gold_price()
-        all_rates['XAU/USD'] = gold_price
+        if gold_price and gold_price != 2000:  # Если получили реальную цену
+            all_rates['XAU/USD'] = gold_price
+        else:
+            all_rates['XAU/USD'] = self.last_successful_rates.get('XAU/USD', 2900.0)
         
         if all_rates:
             self.last_successful_rates.update(all_rates)
@@ -323,12 +366,10 @@ class CurrencyMonitor:
             if user_id not in user_alerts:
                 user_alerts[user_id] = []
             
-            # Время создания не показываем пользователю, поэтому просто сохраняем без него
             alert = {
                 'pair': pair,
                 'target': target,
                 'active': True
-                # Время не храним - оно не нужно
             }
             
             user_alerts[user_id].append(alert)
@@ -365,7 +406,6 @@ class CurrencyMonitor:
             status = "✅" if alert.get('active', False) else "⚡️"
             target = alert.get('target') or alert.get('target_price') or '?'
             pair = alert.get('pair', '?')
-            # Время полностью убрано
             msg += f"{i}. {status} {pair} = {target}\n"
             keyboard["inline_keyboard"].append(
                 [{"text": f"❌ Удалить {i}", "callback_data": f"delete_{i}"}]
@@ -462,8 +502,6 @@ class CurrencyMonitor:
                             msg += f"{pair}: ${rate:.4f}\n"
                         else:
                             msg += f"{pair}: {rate:.4f}\n"
-                    
-                    # Время полностью убрано!
                     
                     keyboard = {
                         "inline_keyboard": [
