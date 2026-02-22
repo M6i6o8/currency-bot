@@ -73,7 +73,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 2000.0,
+            'XAU/USD': 2000.0,  # временно, пока не обновится
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -134,6 +134,46 @@ class CurrencyMonitor:
             logger.error(f"Binance API error: {e}")
             return None
     
+    async def fetch_gold_price(self):
+        """Получает реальную цену золота"""
+        try:
+            session = await self.get_session()
+            
+            # Пробуем несколько источников
+            sources = [
+                {
+                    'url': 'https://api.metals.live/v1/spot/gold',
+                    'parser': lambda data: float(data[0]['price']) if data and len(data) > 0 else None
+                },
+                {
+                    'url': 'https://www.quandl.com/api/v3/datasets/WGC/GOLD_DAILY_USD.json?api_key=free',
+                    'parser': lambda data: float(data['dataset']['data'][0][1]) if 'dataset' in data else None
+                },
+                {
+                    'url': 'https://data-asg.goldprice.org/dbXRates/USD',
+                    'parser': lambda data: float(data['items'][0]['xauPrice']) if 'items' in data and data['items'] else None
+                }
+            ]
+            
+            for source in sources:
+                try:
+                    async with session.get(source['url'], timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            price = source['parser'](data)
+                            if price and price > 0:
+                                logger.info(f"✅ Золото: ${price:.2f}/унция")
+                                return price
+                except Exception as e:
+                    logger.warning(f"Gold source failed: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Gold API error: {e}")
+        
+        # Если ничего не сработало, возвращаем последнее известное значение
+        return self.last_successful_rates.get('XAU/USD', 2000.0)
+    
     async def fetch_from_fiat_api(self):
         """Получает курсы фиатных валют"""
         try:
@@ -180,13 +220,14 @@ class CurrencyMonitor:
         if fiat:
             all_rates.update(fiat)
         
-        # 2. Криптовалюты (с Binance) - включая BTC
+        # 2. Криптовалюты (с Binance)
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
-        # 3. Добавляем золото
-        all_rates['XAU/USD'] = self.last_successful_rates.get('XAU/USD', 2000.0)
+        # 3. Золото - через реальное API
+        gold_price = await self.fetch_gold_price()
+        all_rates['XAU/USD'] = gold_price
         
         if all_rates:
             self.last_successful_rates.update(all_rates)
@@ -342,7 +383,7 @@ class CurrencyMonitor:
             "3️⃣ Введи целевую цену\n\n"
             "⚡️ <b>Пары с низким спредом:</b>\n"
             "• Фиат: EUR/USD, GBP/USD, USD/JPY, EUR/GBP\n"
-            "• Золото: XAU/USD\n"
+            "• Золото: XAU/USD (реальное время)\n"
             "• Крипто: BTC, ETH, SOL, BNB, LINK, TON, XRP, DOGE, AVAX\n\n"
             "🔹 <b>/start</b> - главное меню"
         )
@@ -445,7 +486,7 @@ class CurrencyMonitor:
                     
                     hints = {
                         'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                        'EUR/GBP': '0.87', 'XAU/USD': '2000', 'BTC/USD': '67000',
+                        'EUR/GBP': '0.87', 'XAU/USD': '2900', 'BTC/USD': '67000',
                         'ETH/USD': '1950', 'SOL/USD': '84', 'BNB/USD': '610',
                         'LINK/USD': '8.6', 'TON/USD': '1.35', 'XRP/USD': '1.40',
                         'DOGE/USD': '0.098', 'AVAX/USD': '9.1'
@@ -593,16 +634,12 @@ class CurrencyMonitor:
         """Пинает сам себя каждые 4 минуты, чтобы Render не засыпал"""
         while True:
             try:
-                # Ждём 4 минуты
-                await asyncio.sleep(240)  # 240 секунд = 4 минуты
+                await asyncio.sleep(240)
                 
-                # Получаем URL сервиса из переменной окружения Render
                 render_url = os.environ.get('RENDER_EXTERNAL_URL')
                 if not render_url:
-                    # Если не на Render'е, используем localhost (для тестов)
                     render_url = "http://localhost:8080"
                 
-                # Пингуем свой же health-эндпоинт
                 async with aiohttp.ClientSession() as session:
                     async with session.get(f"{render_url}/health", timeout=30) as response:
                         if response.status == 200:
@@ -613,7 +650,6 @@ class CurrencyMonitor:
                 break
             except Exception as e:
                 logger.error(f"❌ Ошибка самопинга: {e}")
-                # Продолжаем цикл даже при ошибке
                 continue
     
     async def run(self):
@@ -621,17 +657,14 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото + 9 криптовалют (включая BTC)")
+        logger.info(f"📊 Пары: фиат + золото (реальное время) + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
-        # Запускаем веб-сервер для пинга
         app = web.Application()
         app.router.add_get('/health', self.health_check)
         
-        # Получаем порт из переменной окружения (Render задает PORT)
         port = int(os.environ.get('PORT', 8080))
         
-        # Запускаем сервер в фоне
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', port)
@@ -639,11 +672,10 @@ class CurrencyMonitor:
         logger.info(f"🌐 Веб-сервер для пинга запущен на порту {port}")
         
         try:
-            # Запускаем все задачи параллельно
             await asyncio.gather(
                 self.check_rates_task(interval=10),
                 self.check_commands_task(interval=2),
-                self.self_ping_task()  # Добавили самопинг
+                self.self_ping_task()
             )
         except KeyboardInterrupt:
             logger.info("⏹ Остановлено")
