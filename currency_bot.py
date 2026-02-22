@@ -22,10 +22,10 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    5799391012,  # ЗАМЕНИ НА СВОЙ ID
+    123456789,  # ЗАМЕНИ НА СВОЙ ID (если нужен приватный режим)
 ]
 
-DEFAULT_MODE = "public"
+DEFAULT_MODE = "public"  # public - открыт для всех, private - только для своих
 # ============================
 
 if len(sys.argv) > 1:
@@ -74,7 +74,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 5100.0,  # Теперь реальная цена!
+            'XAU/USD': 5100.0,  # Реальная цена золота
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -302,12 +302,13 @@ class CurrencyMonitor:
             logger.error(f"Error sending keyboard: {e}")
     
     async def show_main_menu(self, chat_id):
-        """Главное меню без кнопки помощи"""
+        """Главное меню с кнопкой сотрудничества"""
         keyboard = {
             "inline_keyboard": [
                 [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
                 [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
-                [{"text": "📊 Текущие курсы", "callback_data": "show_rates"}]
+                [{"text": "📊 Текущие курсы", "callback_data": "show_rates"}],
+                [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
             ]
         }
         await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
@@ -485,6 +486,14 @@ class CurrencyMonitor:
                     await self.send_telegram_message_with_keyboard(chat_id, msg, keyboard)
                 else:
                     await self.send_telegram_message(chat_id, "❌ Ошибка получения курсов")
+            elif data == "collaboration":
+                collab_text = (
+                    "🤝 <b>СОТРУДНИЧЕСТВО</b>\n\n"
+                    "📊 Нравится бот? Хочешь такой же для своих целей?\n"
+                    "💎 Помогу с разработкой, настройкой, доработкой\n\n"
+                    "📩 Пиши: @Maranafa2023 - обсудим детали\n\n"
+                )
+                await self.send_telegram_message(chat_id, collab_text)
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
