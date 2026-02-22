@@ -9,6 +9,7 @@ import re
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
+from collections import Counter
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -22,7 +23,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    123456789,  # ЗАМЕНИ НА СВОЙ ID (если нужен приватный режим)
+    5799391012,  # ЗАМЕНИ НА СВОЙ ID
 ]
 
 DEFAULT_MODE = "public"  # public - открыт для всех, private - только для своих
@@ -34,8 +35,9 @@ if len(sys.argv) > 1:
 else:
     PRIVATE_MODE = (DEFAULT_MODE == "private")
 
-# Файл для хранения пользовательских настроек
+# Файлы для хранения данных
 USER_ALERTS_FILE = "user_alerts.json"
+STATS_FILE = "user_stats.json"
 
 def load_user_alerts():
     """Загружает алерты"""
@@ -57,7 +59,48 @@ def save_user_alerts(alerts):
     with open(USER_ALERTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(alerts, f, indent=2, ensure_ascii=False)
 
-# Глобальная переменная для хранения алертов
+def load_user_stats():
+    """Загружает статистику пользователей"""
+    if os.path.exists(STATS_FILE):
+        with open(STATS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def save_user_stats(stats):
+    """Сохраняет статистику пользователей"""
+    with open(STATS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, indent=2, ensure_ascii=False)
+
+def update_user_stats(chat_id, username, first_name, last_name, pair=None):
+    """Обновляет статистику пользователя"""
+    stats = load_user_stats()
+    user_id = str(chat_id)
+    
+    if user_id not in stats:
+        stats[user_id] = {
+            'first_seen': datetime.now().isoformat(),
+            'username': username,
+            'first_name': first_name,
+            'last_name': last_name,
+            'interactions': 0,
+            'alerts_created': 0,
+            'alerts_triggered': 0,
+            'pairs': []
+        }
+    
+    stats[user_id]['last_seen'] = datetime.now().isoformat()
+    stats[user_id]['interactions'] += 1
+    
+    if pair:
+        stats[user_id]['pairs'].append(pair)
+        # Храним только последние 50 пар для статистики
+        if len(stats[user_id]['pairs']) > 50:
+            stats[user_id]['pairs'] = stats[user_id]['pairs'][-50:]
+    
+    save_user_stats(stats)
+    return stats[user_id]
+
+# Глобальные переменные
 user_alerts = load_user_alerts()
 last_notifications = {}
 
@@ -91,6 +134,10 @@ class CurrencyMonitor:
         if not PRIVATE_MODE:
             return True
         return chat_id in ALLOWED_USER_IDS
+    
+    def is_admin(self, chat_id):
+        """Проверяет, является ли пользователь админом"""
+        return str(chat_id) in [str(id) for id in ALLOWED_USER_IDS]
     
     async def get_session(self):
         if self.session is None:
@@ -142,23 +189,19 @@ class CurrencyMonitor:
             
             sources = [
                 {
-                    # Источник 1: GoldPrice.Today (бесплатно, без ключа)
                     'url': 'https://goldprice.today/api.php?data=live',
                     'parser': lambda data: float(data['USD']['gold_price']) if data and 'USD' in data and 'gold_price' in data['USD'] else None
                 },
                 {
-                    # Источник 2: iTick (бесплатный демо-ключ)
                     'url': 'https://api.itick.org/gold?apikey=demo',
                     'parser': lambda data: float(data['price']) if data and 'price' in data else None
                 },
                 {
-                    # Источник 3: GoldAPI.io (публичный ключ)
                     'url': 'https://www.goldapi.io/api/XAU/USD',
                     'headers': {'x-access-token': 'goldapi-3u6v8w9x2y4z5a7b8c9d0e1f2g3h4i5j'},
                     'parser': lambda data: float(data.get('price', 0)) if data and data.get('price') else None
                 },
                 {
-                    # Источник 4: Парсинг HTML (запасной)
                     'url': 'https://www.goldprice.org/live-gold-price',
                     'html_parser': True,
                     'parser': lambda html: self.parse_gold_from_html(html)
@@ -177,7 +220,6 @@ class CurrencyMonitor:
                                 data = await response.json()
                                 price = source['parser'](data)
                             
-                            # Проверяем, что цена реальная (между 1000 и 10000)
                             if price and price > 1000 and price < 10000:
                                 logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['url'].split('/')[2]})")
                                 return price
@@ -188,7 +230,6 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
-        # Если ничего не сработало, возвращаем последнее известное значение
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
         return self.last_successful_rates.get('XAU/USD', 5100.0)
     
@@ -301,6 +342,53 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Error sending keyboard: {e}")
     
+    async def show_stats(self, chat_id):
+        """Показывает статистику использования бота (только для админа)"""
+        if not self.is_admin(chat_id):
+            await self.send_telegram_message(chat_id, "❌ У тебя нет доступа к статистике")
+            return
+        
+        stats = load_user_stats()
+        
+        if not stats:
+            await self.send_telegram_message(chat_id, "📊 Статистика пока пуста")
+            return
+        
+        msg = "📊 <b>СТАТИСТИКА БОТА</b>\n\n"
+        msg += f"👥 Всего пользователей: <b>{len(stats)}</b>\n"
+        
+        # Общая статистика
+        total_interactions = sum(u.get('interactions', 0) for u in stats.values())
+        total_alerts = sum(u.get('alerts_created', 0) for u in stats.values())
+        total_triggered = sum(u.get('alerts_triggered', 0) for u in stats.values())
+        
+        msg += f"💬 Всего сообщений: <b>{total_interactions}</b>\n"
+        msg += f"🎯 Создано алертов: <b>{total_alerts}</b>\n"
+        msg += f"⚡️ Сработало алертов: <b>{total_triggered}</b>\n\n"
+        
+        # Топ пользователей по активности
+        msg += "🏆 <b>Топ пользователей:</b>\n"
+        top_users = sorted(stats.items(), key=lambda x: x[1].get('interactions', 0), reverse=True)[:5]
+        
+        for i, (user_id, data) in enumerate(top_users, 1):
+            name = data.get('first_name', '')
+            if data.get('username'):
+                name += f" (@{data['username']})"
+            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n"
+        
+        # Популярные пары
+        msg += "\n📈 <b>Популярные пары:</b>\n"
+        all_pairs = []
+        for user_data in stats.values():
+            all_pairs.extend(user_data.get('pairs', []))
+        
+        if all_pairs:
+            pair_counts = Counter(all_pairs)
+            for pair, count in pair_counts.most_common(5):
+                msg += f"• {pair}: {count} раз(а)\n"
+        
+        await self.send_telegram_message(chat_id, msg)
+    
     async def show_main_menu(self, chat_id):
         """Главное меню с кнопкой сотрудничества"""
         keyboard = {
@@ -368,6 +456,13 @@ class CurrencyMonitor:
             user_alerts[user_id].append(alert)
             save_user_alerts(user_alerts)
             
+            # Обновляем статистику
+            stats = load_user_stats()
+            if user_id in stats:
+                stats[user_id]['alerts_created'] = stats[user_id].get('alerts_created', 0) + 1
+                stats[user_id]['pairs'] = stats[user_id].get('pairs', []) + [pair]
+                save_user_stats(stats)
+            
             del self.alert_states[str(chat_id)]
             
             await self.send_telegram_message(
@@ -416,6 +511,14 @@ class CurrencyMonitor:
             chat_id = msg['chat']['id']
             text = msg.get('text', '')
             
+            # Получаем данные пользователя
+            username = msg['chat'].get('username', '')
+            first_name = msg['chat'].get('first_name', '')
+            last_name = msg['chat'].get('last_name', '')
+            
+            # Обновляем статистику
+            update_user_stats(chat_id, username, first_name, last_name)
+            
             if not self.is_user_allowed(chat_id):
                 logger.info(f"⛔ Запрещен: {chat_id}")
                 return
@@ -424,6 +527,10 @@ class CurrencyMonitor:
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.show_main_menu(chat_id)
+                return
+            
+            if text == '/stats':
+                await self.show_stats(chat_id)
                 return
             
             if str(chat_id) in self.alert_states:
@@ -448,6 +555,12 @@ class CurrencyMonitor:
             cb = update['callback_query']
             chat_id = cb['message']['chat']['id']
             data = cb['data']
+            
+            # Обновляем статистику для callback-запросов
+            username = cb['from'].get('username', '')
+            first_name = cb['from'].get('first_name', '')
+            last_name = cb['from'].get('last_name', '')
+            update_user_stats(chat_id, username, first_name, last_name)
             
             if not self.is_user_allowed(chat_id):
                 return
@@ -554,6 +667,7 @@ class CurrencyMonitor:
     async def check_thresholds(self, rates):
         """Проверяет достижение целей"""
         notifications = []
+        stats = load_user_stats()
         
         for user_id, alerts in user_alerts.items():
             for alert in alerts:
@@ -580,6 +694,11 @@ class CurrencyMonitor:
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
+                        
+                        # Обновляем статистику срабатываний
+                        if user_id in stats:
+                            stats[user_id]['alerts_triggered'] = stats[user_id].get('alerts_triggered', 0) + 1
+                        
                         save_user_alerts(user_alerts)
                         logger.info(f"Цель {pair}: {current:.2f}")
                 
@@ -593,6 +712,10 @@ class CurrencyMonitor:
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
+                        
+                        if user_id in stats:
+                            stats[user_id]['alerts_triggered'] = stats[user_id].get('alerts_triggered', 0) + 1
+                        
                         save_user_alerts(user_alerts)
                         logger.info(f"Цель {pair}: {current:.4f}")
                 
@@ -606,9 +729,14 @@ class CurrencyMonitor:
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
+                        
+                        if user_id in stats:
+                            stats[user_id]['alerts_triggered'] = stats[user_id].get('alerts_triggered', 0) + 1
+                        
                         save_user_alerts(user_alerts)
                         logger.info(f"Цель {pair}: {current:.5f}")
         
+        save_user_stats(stats)
         return notifications
     
     async def check_rates_task(self, interval=10):
