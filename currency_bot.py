@@ -22,7 +22,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    123456789,  # ЗАМЕНИ НА СВОЙ ID
+    5799391012,  # ЗАМЕНИ НА СВОЙ ID
 ]
 
 DEFAULT_MODE = "public"
