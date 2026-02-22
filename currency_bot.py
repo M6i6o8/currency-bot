@@ -7,6 +7,7 @@ import json
 import sys
 from dotenv import load_dotenv
 from aiohttp import web
+from zoneinfo import ZoneInfo
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -63,6 +64,9 @@ def save_user_alerts(alerts):
 user_alerts = load_user_alerts()
 last_notifications = {}
 
+# Московский часовой пояс (только для внутренних логов)
+MSK_TZ = ZoneInfo('Europe/Moscow')
+
 class CurrencyMonitor:
     def __init__(self):
         self.session = None
@@ -73,7 +77,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 2000.0,  # временно, пока не обновится
+            'XAU/USD': 2000.0,
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -171,7 +175,6 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
-        # Если ничего не сработало, возвращаем последнее известное значение
         return self.last_successful_rates.get('XAU/USD', 2000.0)
     
     async def fetch_from_fiat_api(self):
@@ -194,7 +197,6 @@ class CurrencyMonitor:
                     if 'JPY' in rates:
                         result['USD/JPY'] = rates['JPY']
                     
-                    # Добавляем EUR/GBP
                     if 'EUR' in rates and 'GBP' in rates:
                         eur_usd = 1.0 / rates['EUR']
                         gbp_usd = 1.0 / rates['GBP']
@@ -215,17 +217,14 @@ class CurrencyMonitor:
         """Получает все курсы из всех источников"""
         all_rates = {}
         
-        # 1. Фиатные валюты
         fiat = await self.fetch_from_fiat_api()
         if fiat:
             all_rates.update(fiat)
         
-        # 2. Криптовалюты (с Binance)
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
-        # 3. Золото - через реальное API
         gold_price = await self.fetch_gold_price()
         all_rates['XAU/USD'] = gold_price
         
@@ -324,11 +323,12 @@ class CurrencyMonitor:
             if user_id not in user_alerts:
                 user_alerts[user_id] = []
             
+            # Время создания не показываем пользователю, поэтому просто сохраняем без него
             alert = {
                 'pair': pair,
                 'target': target,
-                'active': True,
-                'created': datetime.now().strftime('%H:%M:%S')
+                'active': True
+                # Время не храним - оно не нужно
             }
             
             user_alerts[user_id].append(alert)
@@ -340,8 +340,7 @@ class CurrencyMonitor:
                 chat_id,
                 f"✅ Алерт создан!\n\n"
                 f"📊 {pair}\n"
-                f"🎯 Цель: {target}\n\n"
-                f"⚡️ Проверка каждые 10 секунд"
+                f"🎯 Цель: {target}"
             )
             await self.show_main_menu(chat_id)
             
@@ -364,9 +363,9 @@ class CurrencyMonitor:
         
         for i, alert in enumerate(alerts, 1):
             status = "✅" if alert.get('active', False) else "⚡️"
-            # Пробуем получить target из разных возможных полей
             target = alert.get('target') or alert.get('target_price') or '?'
             pair = alert.get('pair', '?')
+            # Время полностью убрано
             msg += f"{i}. {status} {pair} = {target}\n"
             keyboard["inline_keyboard"].append(
                 [{"text": f"❌ Удалить {i}", "callback_data": f"delete_{i}"}]
@@ -464,7 +463,7 @@ class CurrencyMonitor:
                         else:
                             msg += f"{pair}: {rate:.4f}\n"
                     
-                    msg += f"\n⏱ {datetime.now().strftime('%H:%M:%S')}"
+                    # Время полностью убрано!
                     
                     keyboard = {
                         "inline_keyboard": [
@@ -534,18 +533,15 @@ class CurrencyMonitor:
     async def check_thresholds(self, rates):
         """Проверяет достижение целевых цен с максимальной точностью"""
         notifications = []
-        now = datetime.now()
         
         for user_id, alerts in user_alerts.items():
             for alert in alerts:
-                # Пропускаем неактивные
                 if not alert.get('active', False):
                     continue
                 
-                # Получаем target из разных возможных полей
                 target = alert.get('target') or alert.get('target_price')
                 if target is None:
-                    continue  # Пропускаем алерты без цели
+                    continue
                     
                 pair = alert.get('pair')
                 if not pair or pair not in rates:
@@ -553,16 +549,13 @@ class CurrencyMonitor:
                 
                 current = rates[pair]
                 
-                # ===== МАКСИМАЛЬНАЯ ТОЧНОСТЬ =====
                 if pair in ['BTC/USD', 'ETH/USD', 'XAU/USD']:
-                    # Для дорогих активов - допуск 0.01%
                     if abs(current - target) / target < 0.0001:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.2f}\n"
-                            f"💰 Текущий: {current:.2f}\n"
-                            f"⏱ {now.strftime('%H:%M:%S')}"
+                            f"💰 Текущий: {current:.2f}"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -570,14 +563,12 @@ class CurrencyMonitor:
                         logger.info(f"Цель {pair}: {current:.2f} (цель: {target:.2f})")
                 
                 elif pair in ['DOGE/USD', 'XRP/USD', 'TON/USD']:
-                    # Для дешевых монет - допуск 0.0001
                     if abs(current - target) <= 0.0001:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.4f}\n"
-                            f"💰 Текущий: {current:.4f}\n"
-                            f"⏱ {now.strftime('%H:%M:%S')}"
+                            f"💰 Текущий: {current:.4f}"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -585,14 +576,12 @@ class CurrencyMonitor:
                         logger.info(f"Цель {pair}: {current:.4f} (цель: {target:.4f})")
                 
                 else:
-                    # Для всех остальных - допуск 0.00005
                     if abs(current - target) <= 0.00005:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.5f}\n"
-                            f"💰 Текущий: {current:.5f}\n"
-                            f"⏱ {now.strftime('%H:%M:%S')}"
+                            f"💰 Текущий: {current:.5f}"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -602,7 +591,6 @@ class CurrencyMonitor:
         return notifications
     
     async def check_rates_task(self, interval=10):
-        """Задача для проверки курсов"""
         while True:
             try:
                 rates = await self.fetch_rates()
@@ -617,7 +605,6 @@ class CurrencyMonitor:
                 await asyncio.sleep(interval)
     
     async def check_commands_task(self, interval=2):
-        """Задача для проверки команд"""
         while True:
             try:
                 await self.get_updates()
@@ -627,11 +614,9 @@ class CurrencyMonitor:
                 await asyncio.sleep(5)
     
     async def health_check(self, request):
-        """Эндпоинт для проверки здоровья - минимальный ответ"""
         return web.Response(text="OK")
     
     async def self_ping_task(self):
-        """Пинает сам себя каждые 4 минуты, чтобы Render не засыпал"""
         while True:
             try:
                 await asyncio.sleep(240)
@@ -653,7 +638,6 @@ class CurrencyMonitor:
                 continue
     
     async def run(self):
-        """Запускает бота и веб-сервер для пинга"""
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
