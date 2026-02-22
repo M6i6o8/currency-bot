@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import json
 import sys
-import re  # Для парсинга HTML золота
+import re
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
@@ -38,7 +38,7 @@ else:
 USER_ALERTS_FILE = "user_alerts.json"
 
 def load_user_alerts():
-    """Загружает алерты и конвертирует старый формат в новый"""
+    """Загружает алерты"""
     if os.path.exists(USER_ALERTS_FILE):
         with open(USER_ALERTS_FILE, 'r', encoding='utf-8') as f:
             alerts = json.load(f)
@@ -46,7 +46,6 @@ def load_user_alerts():
         # Конвертируем старые алерты в новый формат
         for user_id, user_alerts in alerts.items():
             for alert in user_alerts:
-                # Если есть target_price, преобразуем в target
                 if 'target_price' in alert and 'target' not in alert:
                     alert['target'] = alert['target_price']
                     
@@ -54,7 +53,7 @@ def load_user_alerts():
     return {}
 
 def save_user_alerts(alerts):
-    """Сохраняет пользовательские алерты в файл"""
+    """Сохраняет пользовательские алерты"""
     with open(USER_ALERTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(alerts, f, indent=2, ensure_ascii=False)
 
@@ -75,7 +74,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 2900.0,  # Стартовое значение ближе к реальности
+            'XAU/USD': 2900.0,
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -137,30 +136,25 @@ class CurrencyMonitor:
             return None
     
     async def fetch_gold_price(self):
-        """Получает реальную цену золота из нескольких источников"""
+        """Получает реальную цену золота"""
         try:
             session = await self.get_session()
             
-            # Пробуем разные источники по очереди
             sources = [
                 {
-                    # Источник 1: goldapi.io (надежный, публичный ключ)
                     'url': 'https://www.goldapi.io/api/XAU/USD',
                     'headers': {'x-access-token': 'goldapi-3u6v8w9x2y4z5a7b8c9d0e1f2g3h4i5j'},
                     'parser': lambda data: float(data.get('price', 0)) if data and data.get('price') else None
                 },
                 {
-                    # Источник 2: metals-api (бесплатный ключ)
                     'url': 'https://api.metals-api.com/v1/latest?access_key=gk0u8n6f3j2h5b7v9c1x4z6w8y2t4m6p&base=USD&symbols=XAU',
                     'parser': lambda data: 1.0 / float(data['rates']['XAU']) if data and 'rates' in data and 'XAU' in data['rates'] else None
                 },
                 {
-                    # Источник 3: alphavantage (демо-ключ)
                     'url': 'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=USD&apikey=demo',
                     'parser': lambda data: float(data['Realtime Currency Exchange Rate']['5. Exchange Rate']) if data and 'Realtime Currency Exchange Rate' in data else None
                 },
                 {
-                    # Источник 4: gold-price-live (парсинг HTML)
                     'url': 'https://www.goldprice.org/live-gold-price',
                     'html_parser': True,
                     'parser': lambda html: self.parse_gold_from_html(html)
@@ -179,24 +173,22 @@ class CurrencyMonitor:
                                 data = await response.json()
                                 price = source['parser'](data)
                             
-                            if price and price > 0 and 1000 < price < 5000:  # Проверка на адекватность
+                            if price and price > 0 and 1000 < price < 5000:
                                 logger.info(f"✅ Золото: ${price:.2f}/унция")
                                 return price
                 except Exception as e:
-                    logger.warning(f"Gold source {source['url']} failed: {e}")
+                    logger.warning(f"Gold source failed: {e}")
                     continue
                     
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
-        # Если ничего не сработало, возвращаем последнее известное значение
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
         return self.last_successful_rates.get('XAU/USD', 2900.0)
     
     def parse_gold_from_html(self, html):
-        """Парсит цену золота из HTML страницы"""
+        """Парсит цену золота из HTML"""
         try:
-            # Ищем разные паттерны цены
             patterns = [
                 r'XAUUSD.*?(\d+\.?\d*)',
                 r'gold-price.*?(\d+\.?\d*)',
@@ -251,22 +243,19 @@ class CurrencyMonitor:
             }
     
     async def fetch_rates(self):
-        """Получает все курсы из всех источников"""
+        """Получает все курсы"""
         all_rates = {}
         
-        # 1. Фиатные валюты
         fiat = await self.fetch_from_fiat_api()
         if fiat:
             all_rates.update(fiat)
         
-        # 2. Криптовалюты
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
-        # 3. Золото - только реальное!
         gold_price = await self.fetch_gold_price()
-        if gold_price and gold_price != 2000:  # Если получили реальную цену
+        if gold_price and gold_price != 2000:
             all_rates['XAU/USD'] = gold_price
         else:
             all_rates['XAU/USD'] = self.last_successful_rates.get('XAU/USD', 2900.0)
@@ -310,11 +299,11 @@ class CurrencyMonitor:
             logger.error(f"Error sending keyboard: {e}")
     
     async def show_main_menu(self, chat_id):
+        """Главное меню без кнопки помощи"""
         keyboard = {
             "inline_keyboard": [
                 [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
                 [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
-                [{"text": "❓ Помощь", "callback_data": "show_help"}],
                 [{"text": "📊 Текущие курсы", "callback_data": "show_rates"}]
             ]
         }
@@ -414,20 +403,6 @@ class CurrencyMonitor:
         keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
         await self.send_telegram_message_with_keyboard(chat_id, msg, keyboard)
     
-    async def show_help(self, chat_id):
-        help_text = (
-            "📚 <b>Как пользоваться:</b>\n\n"
-            "1️⃣ Нажми <b>«💰 Добавить алерт»</b>\n"
-            "2️⃣ Выбери пару\n"
-            "3️⃣ Введи целевую цену\n\n"
-            "⚡️ <b>Пары с низким спредом:</b>\n"
-            "• Фиат: EUR/USD, GBP/USD, USD/JPY, EUR/GBP\n"
-            "• Золото: XAU/USD (реальное время)\n"
-            "• Крипто: BTC, ETH, SOL, BNB, LINK, TON, XRP, DOGE, AVAX\n\n"
-            "🔹 <b>/start</b> - главное меню"
-        )
-        await self.send_telegram_message(chat_id, help_text)
-    
     async def handle_telegram_commands(self, update):
         try:
             if 'message' not in update:
@@ -455,8 +430,6 @@ class CurrencyMonitor:
                 await self.start_alert_creation(chat_id)
             elif text == '/myalerts':
                 await self.list_alerts(chat_id)
-            elif text == '/help':
-                await self.show_help(chat_id)
             else:
                 await self.show_main_menu(chat_id)
                 
@@ -485,8 +458,6 @@ class CurrencyMonitor:
                 await self.start_alert_creation(chat_id)
             elif data == "show_alerts":
                 await self.list_alerts(chat_id)
-            elif data == "show_help":
-                await self.show_help(chat_id)
             elif data == "show_rates":
                 rates = await self.fetch_rates()
                 if rates:
@@ -569,7 +540,7 @@ class CurrencyMonitor:
             logger.error(f"Updates error: {e}")
     
     async def check_thresholds(self, rates):
-        """Проверяет достижение целевых цен с максимальной точностью"""
+        """Проверяет достижение целей"""
         notifications = []
         
         for user_id, alerts in user_alerts.items():
@@ -598,7 +569,7 @@ class CurrencyMonitor:
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
                         save_user_alerts(user_alerts)
-                        logger.info(f"Цель {pair}: {current:.2f} (цель: {target:.2f})")
+                        logger.info(f"Цель {pair}: {current:.2f}")
                 
                 elif pair in ['DOGE/USD', 'XRP/USD', 'TON/USD']:
                     if abs(current - target) <= 0.0001:
@@ -611,7 +582,7 @@ class CurrencyMonitor:
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
                         save_user_alerts(user_alerts)
-                        logger.info(f"Цель {pair}: {current:.4f} (цель: {target:.4f})")
+                        logger.info(f"Цель {pair}: {current:.4f}")
                 
                 else:
                     if abs(current - target) <= 0.00005:
@@ -624,7 +595,7 @@ class CurrencyMonitor:
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
                         save_user_alerts(user_alerts)
-                        logger.info(f"Цель {pair}: {current:.5f} (цель: {target:.5f})")
+                        logger.info(f"Цель {pair}: {current:.5f}")
         
         return notifications
     
@@ -679,7 +650,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото (реальное время) + криптовалюты")
+        logger.info(f"📊 Пары: фиат + золото + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
