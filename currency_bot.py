@@ -478,22 +478,18 @@ class CurrencyMonitor:
         await self.send_telegram_message(chat_id, msg)
     
     async def show_main_menu(self, chat_id):
-        """Главное меню (без кнопки текущих курсов)"""
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
-                [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
-                [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
-            ]
-        }
-        await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
-    
-    async def start_alert_creation(self, chat_id):
-        """Показывает кнопки с парами и их текущими ценами"""
+        """Главное меню с ценами на кнопках и кнопками внизу"""
         rates = await self.fetch_rates()
         if not rates:
-            await self.send_telegram_message(chat_id, "❌ Ошибка получения курсов. Попробуй позже.")
-            await self.show_main_menu(chat_id)
+            # Если не удалось получить курсы, показываем упрощенное меню
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
+                    [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
+                    [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
+                ]
+            }
+            await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
             return
         
         keyboard = {"inline_keyboard": []}
@@ -542,10 +538,18 @@ class CurrencyMonitor:
             text = f"🌽 CORN/USD: ${rates['CORN/USD']:.2f}"
             keyboard["inline_keyboard"].append([{"text": text, "callback_data": "pair_CORN/USD"}])
         
-        # Кнопка отмены
-        keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
+        # Кнопки внизу
+        keyboard["inline_keyboard"].append([
+            {"text": "📋 Мои алерты", "callback_data": "show_alerts"},
+            {"text": "🤝 Сотрудничество", "callback_data": "collaboration"}
+        ])
         
-        await self.send_telegram_message_with_keyboard(chat_id, "📈 Выбери валютную пару:", keyboard)
+        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для создания алерта:", keyboard)
+    
+    async def start_alert_creation(self, chat_id):
+        """Резервный метод для добавления алерта (если нужно)"""
+        self.alert_states[str(chat_id)] = {'step': 'pair'}
+        await self.show_main_menu(chat_id)
     
     async def handle_alert_input(self, chat_id, text):
         try:
