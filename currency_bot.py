@@ -668,20 +668,31 @@ class CurrencyMonitor:
             elif data == "show_rates":
                 rates = await self.fetch_rates()
                 if rates:
-                    msg = "📊 Текущие курсы:\n\n"
-                    for pair, rate in sorted(rates.items()):
-                        if pair in ['BTC/USD', 'ETH/USD', 'S&P 500', 'NASDAQ']:
-                            msg += f"{pair}: ${rate:,.2f}\n"
-                        elif pair in ['XAU/USD', 'XAG/USD']:
-                            msg += f"{pair}: ${rate:,.2f}\n"
-                        elif pair == 'CORN/USD':
-                            msg += f"{pair}: ${rate:.2f}\n"
-                        elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
-                            msg += f"{pair}: ${rate:.2f}\n"
-                        elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
-                            msg += f"{pair}: ${rate:.4f}\n"
+                    msg = "📊 <b>Текущие курсы:</b>\n\n"
+                    pairs = sorted(rates.items())
+                    
+                    for idx, (pair, rate) in enumerate(pairs):
+                        # Чередование цветов: через один
+                        if idx % 2 == 0:
+                            # Четные строки - обычные
+                            line = f"• {pair}: "
                         else:
-                            msg += f"{pair}: {rate:.4f}\n"
+                            # Нечетные строки - с тегом <code> (моноширинный)
+                            line = f"• <code>{pair}:</code> "
+                        
+                        # Форматируем цену в зависимости от пары
+                        if pair in ['BTC/USD', 'ETH/USD', 'S&P 500', 'NASDAQ']:
+                            msg += line + f"${rate:,.2f}\n"
+                        elif pair in ['XAU/USD', 'XAG/USD']:
+                            msg += line + f"${rate:,.2f}\n"
+                        elif pair == 'CORN/USD':
+                            msg += line + f"${rate:.2f}\n"
+                        elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
+                            msg += line + f"${rate:.2f}\n"
+                        elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
+                            msg += line + f"${rate:.4f}\n"
+                        else:
+                            msg += line + f"{rate:.4f}\n"
                     
                     keyboard = {
                         "inline_keyboard": [
@@ -884,6 +895,7 @@ class CurrencyMonitor:
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
+        logger.info(f"🦓 Режим 'зебра' для текущих курсов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
