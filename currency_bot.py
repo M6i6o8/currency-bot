@@ -711,22 +711,26 @@ class CurrencyMonitor:
             elif data.startswith("pair_") and data != "pair_noop" and data != "noop":
                 pair = data.replace("pair_", "")
                 if str(chat_id) in self.alert_states:
+                    # Если уже есть состояние - обновляем пару
                     self.alert_states[str(chat_id)]['pair'] = pair
-                    
-                    hints = {
-                        'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                        'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
-                        'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
-                        'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
-                        'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
-                        'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
-                    }
-                    hint = hints.get(pair, '1.0')
-                    
-                    await self.send_telegram_message(
-                        chat_id,
-                        f"💰 Пара: {pair}\n\n📝 Введи целевую цену:\nНапример: {hint}"
-                    )
+                else:
+                    # Если нет состояния - создаем новое
+                    self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
+                
+                hints = {
+                    'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
+                    'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
+                    'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
+                    'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
+                    'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
+                    'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
+                }
+                hint = hints.get(pair, '1.0')
+                
+                await self.send_telegram_message(
+                    chat_id,
+                    f"💰 Пара: {pair}\n\n📝 Введи целевую цену:\nНапример: {hint}"
+                )
             elif data.startswith("delete_"):
                 try:
                     num = int(data.replace("delete_", "")) - 1
