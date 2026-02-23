@@ -1,7 +1,7 @@
 import asyncio
 import aiohttp
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
 import sys
@@ -144,6 +144,10 @@ class CurrencyMonitor:
             # Товары
             'CORN/USD': 4.50
         }
+        
+        # Для кэширования индексов
+        self.last_indices_update = None
+        self.cached_indices = None
     
     def is_user_allowed(self, chat_id):
         if not PRIVATE_MODE:
@@ -227,7 +231,7 @@ class CurrencyMonitor:
                     data = await response.json()
                     price = float(data['price'])
                     
-                    if price and price > 10 and price < 100:  # Серебро ~$30
+                    if price and price > 10 and price < 100:
                         logger.info(f"✅ Серебро: ${price:.2f}/унция")
                         return price
         except Exception as e:
@@ -236,56 +240,76 @@ class CurrencyMonitor:
         return self.last_successful_rates.get('XAG/USD', 30.0)
     
     async def fetch_indices(self):
-        """Получает значения индексов через Twelve Data (один запрос)"""
+        """Получает значения индексов из нескольких источников"""
+        now = datetime.now()
+        
+        # Если обновляли меньше минуты назад - возвращаем кэш
+        if self.last_indices_update and self.cached_indices:
+            if (now - self.last_indices_update).total_seconds() < 60:
+                logger.info("📊 Индексы из кэша")
+                return self.cached_indices
+        
+        result = {}
+        
+        # Источник 1: Twelve Data (основной)
+        try:
+            session = await self.get_session()
+            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
+            async with session.get(url, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'SPY' in data and 'close' in data['SPY']:
+                        result['S&P 500'] = float(data['SPY']['close'])
+                    if 'QQQ' in data and 'close' in data['QQQ']:
+                        result['NASDAQ'] = float(data['QQQ']['close'])
+                    if result:
+                        logger.info("✅ Индексы от Twelve Data")
+                        self.cached_indices = result
+                        self.last_indices_update = now
+                        return result
+        except Exception as e:
+            logger.warning(f"Twelve Data error: {e}")
+        
+        # Источник 2: Alpha Vantage (бесплатный демо-ключ)
         try:
             session = await self.get_session()
             
-            # Запрашиваем оба индекса в одном запросе
-            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
-            
-            async with session.get(url, timeout=10) as response:
+            # S&P 500
+            url_spy = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=SPY&apikey=demo"
+            async with session.get(url_spy, timeout=5) as response:
                 if response.status == 200:
                     data = await response.json()
-                    result = {}
-                    
-                    # SPY
-                    if 'SPY' in data and 'close' in data['SPY']:
-                        result['S&P 500'] = float(data['SPY']['close'])
-                        logger.info(f"✅ S&P 500: ${result['S&P 500']:.2f}")
-                    
-                    # QQQ
-                    if 'QQQ' in data and 'close' in data['QQQ']:
-                        result['NASDAQ'] = float(data['QQQ']['close'])
-                        logger.info(f"✅ NASDAQ: ${result['NASDAQ']:.2f}")
-                    
-                    if result:
-                        return result
-                    else:
-                        logger.warning("Не удалось получить данные индексов")
-                        return {
-                            'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
-                            'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
-                        }
-                else:
-                    logger.warning(f"Twelve Data вернул статус {response.status}")
-                    return {
-                        'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
-                        'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
-                    }
-                
+                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
+                        result['S&P 500'] = float(data['Global Quote']['05. price'])
+            
+            # NASDAQ
+            url_qqq = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=QQQ&apikey=demo"
+            async with session.get(url_qqq, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
+                        result['NASDAQ'] = float(data['Global Quote']['05. price'])
+            
+            if result:
+                logger.info("✅ Индексы от Alpha Vantage")
+                self.cached_indices = result
+                self.last_indices_update = now
+                return result
         except Exception as e:
-            logger.error(f"Twelve Data error: {e}")
-            return {
-                'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
-                'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
-            }
+            logger.warning(f"Alpha Vantage error: {e}")
+        
+        # Источник 3: Запасные данные
+        logger.warning("⚠️ Использую кэшированные значения индексов")
+        return self.cached_indices if self.cached_indices else {
+            'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+            'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+        }
     
     async def fetch_corn_price(self):
         """Получает цену кукурузы через Twelve Data"""
         try:
             session = await self.get_session()
             
-            # Фьючерс на кукурузу - символ ZC (Corn Futures)
             url = f"https://api.twelvedata.com/quote?symbol=ZC&apikey={TWELVEDATA_KEY}"
             
             async with session.get(url, timeout=10) as response:
