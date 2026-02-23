@@ -478,46 +478,72 @@ class CurrencyMonitor:
         await self.send_telegram_message(chat_id, msg)
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с кнопкой сотрудничества"""
+        """Главное меню (без кнопки текущих курсов)"""
         keyboard = {
             "inline_keyboard": [
                 [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
                 [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
-                [{"text": "📊 Текущие курсы", "callback_data": "show_rates"}],
                 [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
             ]
         }
         await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
     
     async def start_alert_creation(self, chat_id):
-        self.alert_states[str(chat_id)] = {'step': 'pair'}
+        """Показывает кнопки с парами и их текущими ценами"""
+        rates = await self.fetch_rates()
+        if not rates:
+            await self.send_telegram_message(chat_id, "❌ Ошибка получения курсов. Попробуй позже.")
+            await self.show_main_menu(chat_id)
+            return
         
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": "💶 EUR/USD", "callback_data": "pair_EUR/USD"}],
-                [{"text": "💷 GBP/USD", "callback_data": "pair_GBP/USD"}],
-                [{"text": "💵 USD/JPY", "callback_data": "pair_USD/JPY"}],
-                [{"text": "💶💷 EUR/GBP", "callback_data": "pair_EUR/GBP"}],
-                [{"text": "🏅 XAU/USD", "callback_data": "pair_XAU/USD"}],
-                [{"text": "🥈 XAG/USD", "callback_data": "pair_XAG/USD"}],
-                [{"text": "———— КРИПТОВАЛЮТЫ ————", "callback_data": "noop"}],
-                [{"text": "₿ BTC/USD", "callback_data": "pair_BTC/USD"}],
-                [{"text": "🟦 ETH/USD", "callback_data": "pair_ETH/USD"}],
-                [{"text": "🟪 SOL/USD", "callback_data": "pair_SOL/USD"}],
-                [{"text": "🟨 BNB/USD", "callback_data": "pair_BNB/USD"}],
-                [{"text": "🔗 LINK/USD", "callback_data": "pair_LINK/USD"}],
-                [{"text": "💎 TON/USD", "callback_data": "pair_TON/USD"}],
-                [{"text": "⚡️ XRP/USD", "callback_data": "pair_XRP/USD"}],
-                [{"text": "🐕 DOGE/USD", "callback_data": "pair_DOGE/USD"}],
-                [{"text": "🏔 AVAX/USD", "callback_data": "pair_AVAX/USD"}],
-                [{"text": "———— ИНДЕКСЫ ————", "callback_data": "noop"}],
-                [{"text": "📈 S&P 500", "callback_data": "pair_S&P 500"}],
-                [{"text": "📊 NASDAQ", "callback_data": "pair_NASDAQ"}],
-                [{"text": "———— ТОВАРЫ ————", "callback_data": "noop"}],
-                [{"text": "🌽 CORN/USD", "callback_data": "pair_CORN/USD"}],
-                [{"text": "◀️ Отмена", "callback_data": "cancel_alert"}]
-            ]
-        }
+        keyboard = {"inline_keyboard": []}
+        
+        # Валюты
+        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']
+        for pair in currency_pairs:
+            if pair in rates:
+                rate = rates[pair]
+                text = f"💶 {pair}: {rate:.4f}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+        
+        # Металлы
+        metals = ['XAU/USD', 'XAG/USD']
+        for pair in metals:
+            if pair in rates:
+                rate = rates[pair]
+                text = f"🏅 {pair}: ${rate:,.2f}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+        
+        # Крипта
+        crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'LINK/USD', 'TON/USD', 'XRP/USD', 'DOGE/USD', 'AVAX/USD']
+        for pair in crypto_pairs:
+            if pair in rates:
+                rate = rates[pair]
+                if pair in ['BTC/USD', 'ETH/USD']:
+                    text = f"₿ {pair}: ${rate:,.2f}"
+                elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
+                    text = f"🟪 {pair}: ${rate:.2f}"
+                elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
+                    text = f"⚡️ {pair}: ${rate:.4f}"
+                else:
+                    text = f"🪙 {pair}: ${rate:.2f}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+        
+        # Индексы
+        indices = ['S&P 500', 'NASDAQ']
+        for pair in indices:
+            if pair in rates:
+                rate = rates[pair]
+                text = f"📈 {pair}: ${rate:,.2f}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+        
+        # Товары
+        if 'CORN/USD' in rates:
+            text = f"🌽 CORN/USD: ${rates['CORN/USD']:.2f}"
+            keyboard["inline_keyboard"].append([{"text": text, "callback_data": "pair_CORN/USD"}])
+        
+        # Кнопка отмены
+        keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
         
         await self.send_telegram_message_with_keyboard(chat_id, "📈 Выбери валютную пару:", keyboard)
     
@@ -665,41 +691,6 @@ class CurrencyMonitor:
                 await self.start_alert_creation(chat_id)
             elif data == "show_alerts":
                 await self.list_alerts(chat_id)
-            elif data == "show_rates":
-                rates = await self.fetch_rates()
-                if rates:
-                    msg = "📊 <b>Текущие курсы:</b>\n\n"
-                    pairs = sorted(rates.items())
-                    
-                    for idx, (pair, rate) in enumerate(pairs):
-                        # Чередование с тегом <pre> для нечетных строк
-                        if idx % 2 == 0:
-                            line = f"• {pair}: "
-                        else:
-                            line = f"• <pre>{pair}:</pre> "
-                        
-                        # Форматируем цену в зависимости от пары
-                        if pair in ['BTC/USD', 'ETH/USD', 'S&P 500', 'NASDAQ']:
-                            msg += line + f"${rate:,.2f}\n"
-                        elif pair in ['XAU/USD', 'XAG/USD']:
-                            msg += line + f"${rate:,.2f}\n"
-                        elif pair == 'CORN/USD':
-                            msg += line + f"${rate:.2f}\n"
-                        elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
-                            msg += line + f"${rate:.2f}\n"
-                        elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
-                            msg += line + f"${rate:.4f}\n"
-                        else:
-                            msg += line + f"{rate:.4f}\n"
-                    
-                    keyboard = {
-                        "inline_keyboard": [
-                            [{"text": "◀️ Назад", "callback_data": "main_menu"}]
-                        ]
-                    }
-                    await self.send_telegram_message_with_keyboard(chat_id, msg, keyboard)
-                else:
-                    await self.send_telegram_message(chat_id, "❌ Ошибка получения курсов")
             elif data == "collaboration":
                 collab_text = (
                     "🤝 <b>СОТРУДНИЧЕСТВО</b>\n\n"
@@ -893,7 +884,6 @@ class CurrencyMonitor:
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
-        logger.info(f"🦓 Режим 'зебра' для текущих курсов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
