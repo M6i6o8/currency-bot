@@ -106,7 +106,7 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None):
 user_alerts = load_user_alerts()
 last_notifications = {}
 
-# Московский часовой пояс (только для внутренних логов)
+# Московский часовой пояс
 MSK_TZ = ZoneInfo('Europe/Moscow')
 
 class CurrencyMonitor:
@@ -236,48 +236,42 @@ class CurrencyMonitor:
         return self.last_successful_rates.get('XAG/USD', 30.0)
     
     async def fetch_indices(self):
-        """Получает значения индексов через Twelve Data"""
+        """Получает значения индексов через Twelve Data (один запрос)"""
         try:
             session = await self.get_session()
             
-            result = {}
+            # Запрашиваем оба индекса в одном запросе
+            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
             
-            # S&P 500 через SPY
-            url_spx = f"https://api.twelvedata.com/quote?symbol=SPY&apikey={TWELVEDATA_KEY}"
-            async with session.get(url_spx, timeout=10) as response:
+            async with session.get(url, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if 'close' in data:
-                        result['S&P 500'] = float(data['close'])
+                    result = {}
+                    
+                    # SPY
+                    if 'SPY' in data and 'close' in data['SPY']:
+                        result['S&P 500'] = float(data['SPY']['close'])
                         logger.info(f"✅ S&P 500: ${result['S&P 500']:.2f}")
-                    elif 'code' in data and data['code'] == 401:
-                        logger.error(f"Twelve Data ошибка: {data.get('message', 'Нет доступа')}")
-                else:
-                    logger.warning(f"S&P 500 API вернул статус {response.status}")
-            
-            await asyncio.sleep(0.5)  # Небольшая задержка между запросами
-            
-            # NASDAQ через QQQ
-            url_nasdaq = f"https://api.twelvedata.com/quote?symbol=QQQ&apikey={TWELVEDATA_KEY}"
-            async with session.get(url_nasdaq, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'close' in data:
-                        result['NASDAQ'] = float(data['close'])
+                    
+                    # QQQ
+                    if 'QQQ' in data and 'close' in data['QQQ']:
+                        result['NASDAQ'] = float(data['QQQ']['close'])
                         logger.info(f"✅ NASDAQ: ${result['NASDAQ']:.2f}")
-                    elif 'code' in data and data['code'] == 401:
-                        logger.error(f"Twelve Data ошибка: {data.get('message', 'Нет доступа')}")
+                    
+                    if result:
+                        return result
+                    else:
+                        logger.warning("Не удалось получить данные индексов")
+                        return {
+                            'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+                            'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+                        }
                 else:
-                    logger.warning(f"NASDAQ API вернул статус {response.status}")
-            
-            if result:
-                return result
-            else:
-                logger.warning("Не удалось получить данные индексов")
-                return {
-                    'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
-                    'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
-                }
+                    logger.warning(f"Twelve Data вернул статус {response.status}")
+                    return {
+                        'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+                        'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+                    }
                 
         except Exception as e:
             logger.error(f"Twelve Data error: {e}")
