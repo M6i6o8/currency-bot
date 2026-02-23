@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Конфигурация Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
+# API ключи
+TWELVEDATA_KEY = os.getenv('TWELVEDATA_KEY')
+
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
     5799391012,  # ЗАМЕНИ НА СВОЙ ID
@@ -134,10 +137,6 @@ class CurrencyMonitor:
             'DOGE/USD': 0.098,
             'AVAX/USD': 9.1,
             
-            # Нефть
-            'BRENT/USD': 82.0,
-            'WTI/USD': 78.0,
-            
             # Индексы
             'S&P 500': 5100.0,
             'NASDAQ': 18000.0,
@@ -236,97 +235,77 @@ class CurrencyMonitor:
         
         return self.last_successful_rates.get('XAG/USD', 30.0)
     
-    async def fetch_oil_prices(self):
-        """Получает цены на нефть Brent и WTI через публичное API"""
-        try:
-            session = await self.get_session()
-            
-            # Используем бесплатный источник - EIA или ersama.com
-            # Для Brent
-            url_brent = "https://api.ersama.com/api/oil/brent"
-            # Для WTI
-            url_wti = "https://api.ersama.com/api/oil/wti"
-            
-            result = {}
-            
-            async with session.get(url_brent, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'price' in data:
-                        result['BRENT/USD'] = float(data['price'])
-                        logger.info(f"✅ Нефть Brent: ${result['BRENT/USD']:.2f}")
-            
-            async with session.get(url_wti, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'price' in data:
-                        result['WTI/USD'] = float(data['price'])
-                        logger.info(f"✅ Нефть WTI: ${result['WTI/USD']:.2f}")
-            
-            if result:
-                return result
-                
-        except Exception as e:
-            logger.error(f"Oil API error: {e}")
-        
-        # Запасной вариант - Mock данные для демо
-        return {
-            'BRENT/USD': self.last_successful_rates.get('BRENT/USD', 82.0),
-            'WTI/USD': self.last_successful_rates.get('WTI/USD', 78.0)
-        }
-    
     async def fetch_indices(self):
-        """Получает значения индексов S&P 500 и NASDAQ"""
+        """Получает значения индексов через Twelve Data"""
         try:
             session = await self.get_session()
             
-            # Используем Twelve Data (бесплатно, нужен ключ) или ersama.com
-            # Но для демо используем ersama.com
             result = {}
             
-            url_spx = "https://api.ersama.com/api/index/sp500"
-            url_nasdaq = "https://api.ersama.com/api/index/nasdaq"
-            
+            # S&P 500 через SPY
+            url_spx = f"https://api.twelvedata.com/quote?symbol=SPY&apikey={TWELVEDATA_KEY}"
             async with session.get(url_spx, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if 'value' in data:
-                        result['S&P 500'] = float(data['value'])
+                    if 'close' in data:
+                        result['S&P 500'] = float(data['close'])
                         logger.info(f"✅ S&P 500: ${result['S&P 500']:.2f}")
+                    elif 'code' in data and data['code'] == 401:
+                        logger.error(f"Twelve Data ошибка: {data.get('message', 'Нет доступа')}")
+                else:
+                    logger.warning(f"S&P 500 API вернул статус {response.status}")
             
+            await asyncio.sleep(0.5)  # Небольшая задержка между запросами
+            
+            # NASDAQ через QQQ
+            url_nasdaq = f"https://api.twelvedata.com/quote?symbol=QQQ&apikey={TWELVEDATA_KEY}"
             async with session.get(url_nasdaq, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if 'value' in data:
-                        result['NASDAQ'] = float(data['value'])
+                    if 'close' in data:
+                        result['NASDAQ'] = float(data['close'])
                         logger.info(f"✅ NASDAQ: ${result['NASDAQ']:.2f}")
+                    elif 'code' in data and data['code'] == 401:
+                        logger.error(f"Twelve Data ошибка: {data.get('message', 'Нет доступа')}")
+                else:
+                    logger.warning(f"NASDAQ API вернул статус {response.status}")
             
             if result:
                 return result
+            else:
+                logger.warning("Не удалось получить данные индексов")
+                return {
+                    'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+                    'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+                }
                 
         except Exception as e:
-            logger.error(f"Indices API error: {e}")
-        
-        return {
-            'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
-            'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
-        }
+            logger.error(f"Twelve Data error: {e}")
+            return {
+                'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+                'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+            }
     
     async def fetch_corn_price(self):
-        """Получает цену на кукурузу"""
+        """Получает цену кукурузы через Twelve Data"""
         try:
             session = await self.get_session()
             
-            # Используем публичное API для сельхозтоваров
-            url = "https://api.ersama.com/api/commodity/corn"
+            # Фьючерс на кукурузу - символ ZC (Corn Futures)
+            url = f"https://api.twelvedata.com/quote?symbol=ZC&apikey={TWELVEDATA_KEY}"
             
             async with session.get(url, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if 'price' in data:
-                        price = float(data['price'])
+                    if 'close' in data:
+                        price = float(data['close'])
                         logger.info(f"✅ Кукуруза: ${price:.2f}/бушель")
                         return price
+                    elif 'code' in data and data['code'] == 401:
+                        logger.error(f"Twelve Data ошибка: {data.get('message', 'Нет доступа')}")
+                else:
+                    logger.warning(f"Кукуруза API вернул статус {response.status}")
+                    
         except Exception as e:
             logger.error(f"Corn API error: {e}")
         
@@ -388,11 +367,6 @@ class CurrencyMonitor:
         
         silver = await self.fetch_silver_price()
         all_rates['XAG/USD'] = silver
-        
-        # Нефть
-        oil = await self.fetch_oil_prices()
-        if oil:
-            all_rates.update(oil)
         
         # Индексы
         indices = await self.fetch_indices()
@@ -518,9 +492,6 @@ class CurrencyMonitor:
                 [{"text": "⚡️ XRP/USD", "callback_data": "pair_XRP/USD"}],
                 [{"text": "🐕 DOGE/USD", "callback_data": "pair_DOGE/USD"}],
                 [{"text": "🏔 AVAX/USD", "callback_data": "pair_AVAX/USD"}],
-                [{"text": "———— НЕФТЬ ————", "callback_data": "noop"}],
-                [{"text": "🛢️ BRENT/USD", "callback_data": "pair_BRENT/USD"}],
-                [{"text": "🛢️ WTI/USD", "callback_data": "pair_WTI/USD"}],
                 [{"text": "———— ИНДЕКСЫ ————", "callback_data": "noop"}],
                 [{"text": "📈 S&P 500", "callback_data": "pair_S&P 500"}],
                 [{"text": "📊 NASDAQ", "callback_data": "pair_NASDAQ"}],
@@ -685,8 +656,6 @@ class CurrencyMonitor:
                             msg += f"{pair}: ${rate:,.2f}\n"
                         elif pair in ['XAU/USD', 'XAG/USD']:
                             msg += f"{pair}: ${rate:,.2f}\n"
-                        elif pair in ['BRENT/USD', 'WTI/USD']:
-                            msg += f"{pair}: ${rate:.2f}\n"
                         elif pair == 'CORN/USD':
                             msg += f"{pair}: ${rate:.2f}\n"
                         elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
@@ -728,8 +697,7 @@ class CurrencyMonitor:
                         'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
                         'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
                         'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
-                        'BRENT/USD': '82', 'WTI/USD': '78', 'S&P 500': '5100',
-                        'NASDAQ': '18000', 'CORN/USD': '4.50'
+                        'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
                     }
                     hint = hints.get(pair, '1.0')
                     
@@ -896,7 +864,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + металлы + крипта + нефть + индексы + товары")
+        logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
