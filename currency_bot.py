@@ -588,12 +588,19 @@ class CurrencyMonitor:
             
             del self.alert_states[str(chat_id)]
             
-            # Только подтверждение, без главного меню
-            await self.send_telegram_message(
+            # Подтверждение с кнопкой возврата в меню
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "📋 К списку пар", "callback_data": "main_menu"}]
+                ]
+            }
+            
+            await self.send_telegram_message_with_keyboard(
                 chat_id,
                 f"✅ Алерт создан!\n\n"
                 f"📊 {pair}\n"
-                f"🎯 Цель: {target}"
+                f"🎯 Цель: {target}",
+                keyboard
             )
             
         except ValueError:
