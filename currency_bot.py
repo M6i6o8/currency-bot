@@ -112,11 +112,18 @@ class CurrencyMonitor:
         self.last_update_id = 0
         self.alert_states = {}
         self.last_successful_rates = {
+            # Валюты
             'EUR/USD': 1.08,
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
+            'EUR/GBP': 0.87,
+            
+            # Металлы
             'XAU/USD': 5160.0,
+            'XAG/USD': 30.0,
+            
+            # Крипта
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -126,7 +133,17 @@ class CurrencyMonitor:
             'XRP/USD': 1.40,
             'DOGE/USD': 0.098,
             'AVAX/USD': 9.1,
-            'EUR/GBP': 0.87
+            
+            # Нефть
+            'BRENT/USD': 82.0,
+            'WTI/USD': 78.0,
+            
+            # Индексы
+            'S&P 500': 5100.0,
+            'NASDAQ': 18000.0,
+            
+            # Товары
+            'CORN/USD': 4.50
         }
     
     def is_user_allowed(self, chat_id):
@@ -181,94 +198,139 @@ class CurrencyMonitor:
             logger.error(f"Binance API error: {e}")
             return None
     
-    def parse_vn_gold(self, data):
-        """Парсит цену из вьетнамского API (запасной вариант)"""
-        try:
-            if data and 'data' in data and data['data']:
-                vnd_price = float(data['data'][0]['buy'])
-                usd_price = vnd_price / 25400
-                return usd_price
-        except:
-            return None
-        return None
-    
     async def fetch_gold_price(self):
-        """Получает цену золота из нескольких рабочих источников"""
+        """Получает цену золота через Gold-API"""
+        try:
+            session = await self.get_session()
+            url = "https://api.gold-api.com/price/XAU"
+            
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    price = float(data['price'])
+                    
+                    if price and price > 1000 and price < 10000:
+                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Gold-API)")
+                        return price
+        except Exception as e:
+            logger.error(f"Gold-API error: {e}")
+        
+        return self.last_successful_rates.get('XAU/USD', 5160.0)
+    
+    async def fetch_silver_price(self):
+        """Получает цену серебра через Gold-API"""
+        try:
+            session = await self.get_session()
+            url = "https://api.gold-api.com/price/XAG"
+            
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    price = float(data['price'])
+                    
+                    if price and price > 10 and price < 100:  # Серебро ~$30
+                        logger.info(f"✅ Серебро: ${price:.2f}/унция")
+                        return price
+        except Exception as e:
+            logger.error(f"Silver API error: {e}")
+        
+        return self.last_successful_rates.get('XAG/USD', 30.0)
+    
+    async def fetch_oil_prices(self):
+        """Получает цены на нефть Brent и WTI через публичное API"""
         try:
             session = await self.get_session()
             
-            sources = [
-                {
-                    # Источник 1: gold-api.com (самый надежный, без ключа)
-                    'name': 'Gold-API.com',
-                    'url': 'https://api.gold-api.com/price/XAU',
-                    'parser': lambda data: float(data['price']) if data and 'price' in data else None
-                },
-                {
-                    # Источник 2: metals-api.com (нужен бесплатный ключ)
-                    'name': 'Metals-API',
-                    'url': 'https://api.metals-api.com/v1/latest?access_key=free&base=USD&symbols=XAU',
-                    'parser': lambda data: 1.0 / float(data['rates']['XAU']) if data and 'rates' in data and 'XAU' in data['rates'] else None
-                },
-                {
-                    # Источник 3: FreeGoldPrice.org (бесплатно, без ключа)
-                    'name': 'FreeGoldPrice',
-                    'url': 'https://freegoldprice.org/api/current',
-                    'parser': lambda data: float(data['gold_price_usd']) if data and 'gold_price_usd' in data else None
-                },
-                {
-                    # Источник 4: vnappmob (азиатский сервер, быстрый)
-                    'name': 'VNAppMob',
-                    'url': 'https://api.vnappmob.com/api/v2/gold/sjc',
-                    'parser': self.parse_vn_gold
-                }
-            ]
+            # Используем бесплатный источник - EIA или ersama.com
+            # Для Brent
+            url_brent = "https://api.ersama.com/api/oil/brent"
+            # Для WTI
+            url_wti = "https://api.ersama.com/api/oil/wti"
             
-            for source in sources:
-                try:
-                    logger.info(f"Пробуем источник: {source['name']}")
-                    async with session.get(source['url'], timeout=10) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if source['name'] == 'VNAppMob':
-                                price = source['parser'](data)
-                            else:
-                                price = source['parser'](data)
-                            
-                            if price and price > 1000 and price < 10000:
-                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['name']})")
-                                self.last_successful_rates['XAU/USD'] = price
-                                return price
-                            else:
-                                logger.warning(f"⚠️ {source['name']} вернул некорректную цену: {price}")
-                        else:
-                            logger.warning(f"⚠️ {source['name']} вернул статус {response.status}")
-                except Exception as e:
-                    logger.warning(f"❌ {source['name']} failed: {e}")
-                    continue
+            result = {}
             
-            # Запасной вариант — парсинг HTML
-            try:
-                url = "https://www.goldprice.org/live-gold-price"
-                async with session.get(url, timeout=10) as response:
-                    if response.status == 200:
-                        html = await response.text()
-                        match = re.search(r'XAUUSD.*?(\d+\.?\d*)', html)
-                        if match:
-                            price = float(match.group(1))
-                            if 1000 < price < 10000:
-                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: GoldPrice.org HTML)")
-                                self.last_successful_rates['XAU/USD'] = price
-                                return price
-            except Exception as e:
-                logger.warning(f"❌ HTML parsing error: {e}")
+            async with session.get(url_brent, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'price' in data:
+                        result['BRENT/USD'] = float(data['price'])
+                        logger.info(f"✅ Нефть Brent: ${result['BRENT/USD']:.2f}")
             
+            async with session.get(url_wti, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'price' in data:
+                        result['WTI/USD'] = float(data['price'])
+                        logger.info(f"✅ Нефть WTI: ${result['WTI/USD']:.2f}")
+            
+            if result:
+                return result
+                
         except Exception as e:
-            logger.error(f"Gold API error: {e}")
+            logger.error(f"Oil API error: {e}")
         
-        # Если всё упало, возвращаем кэш
-        logger.warning("⚠️ Все источники золота недоступны, использую кэш")
-        return self.last_successful_rates.get('XAU/USD', 5160.0)
+        # Запасной вариант - Mock данные для демо
+        return {
+            'BRENT/USD': self.last_successful_rates.get('BRENT/USD', 82.0),
+            'WTI/USD': self.last_successful_rates.get('WTI/USD', 78.0)
+        }
+    
+    async def fetch_indices(self):
+        """Получает значения индексов S&P 500 и NASDAQ"""
+        try:
+            session = await self.get_session()
+            
+            # Используем Twelve Data (бесплатно, нужен ключ) или ersama.com
+            # Но для демо используем ersama.com
+            result = {}
+            
+            url_spx = "https://api.ersama.com/api/index/sp500"
+            url_nasdaq = "https://api.ersama.com/api/index/nasdaq"
+            
+            async with session.get(url_spx, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'value' in data:
+                        result['S&P 500'] = float(data['value'])
+                        logger.info(f"✅ S&P 500: ${result['S&P 500']:.2f}")
+            
+            async with session.get(url_nasdaq, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'value' in data:
+                        result['NASDAQ'] = float(data['value'])
+                        logger.info(f"✅ NASDAQ: ${result['NASDAQ']:.2f}")
+            
+            if result:
+                return result
+                
+        except Exception as e:
+            logger.error(f"Indices API error: {e}")
+        
+        return {
+            'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
+            'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
+        }
+    
+    async def fetch_corn_price(self):
+        """Получает цену на кукурузу"""
+        try:
+            session = await self.get_session()
+            
+            # Используем публичное API для сельхозтоваров
+            url = "https://api.ersama.com/api/commodity/corn"
+            
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'price' in data:
+                        price = float(data['price'])
+                        logger.info(f"✅ Кукуруза: ${price:.2f}/бушель")
+                        return price
+        except Exception as e:
+            logger.error(f"Corn API error: {e}")
+        
+        return self.last_successful_rates.get('CORN/USD', 4.50)
     
     async def fetch_from_fiat_api(self):
         """Получает курсы фиатных валют"""
@@ -310,16 +372,36 @@ class CurrencyMonitor:
         """Получает все курсы"""
         all_rates = {}
         
+        # Фиатные валюты
         fiat = await self.fetch_from_fiat_api()
         if fiat:
             all_rates.update(fiat)
         
+        # Криптовалюты
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
-        gold_price = await self.fetch_gold_price()
-        all_rates['XAU/USD'] = gold_price
+        # Металлы
+        gold = await self.fetch_gold_price()
+        all_rates['XAU/USD'] = gold
+        
+        silver = await self.fetch_silver_price()
+        all_rates['XAG/USD'] = silver
+        
+        # Нефть
+        oil = await self.fetch_oil_prices()
+        if oil:
+            all_rates.update(oil)
+        
+        # Индексы
+        indices = await self.fetch_indices()
+        if indices:
+            all_rates.update(indices)
+        
+        # Товары
+        corn = await self.fetch_corn_price()
+        all_rates['CORN/USD'] = corn
         
         if all_rates:
             self.last_successful_rates.update(all_rates)
@@ -423,8 +505,9 @@ class CurrencyMonitor:
                 [{"text": "💶 EUR/USD", "callback_data": "pair_EUR/USD"}],
                 [{"text": "💷 GBP/USD", "callback_data": "pair_GBP/USD"}],
                 [{"text": "💵 USD/JPY", "callback_data": "pair_USD/JPY"}],
-                [{"text": "🏅 XAU/USD", "callback_data": "pair_XAU/USD"}],
                 [{"text": "💶💷 EUR/GBP", "callback_data": "pair_EUR/GBP"}],
+                [{"text": "🏅 XAU/USD", "callback_data": "pair_XAU/USD"}],
+                [{"text": "🥈 XAG/USD", "callback_data": "pair_XAG/USD"}],
                 [{"text": "———— КРИПТОВАЛЮТЫ ————", "callback_data": "noop"}],
                 [{"text": "₿ BTC/USD", "callback_data": "pair_BTC/USD"}],
                 [{"text": "🟦 ETH/USD", "callback_data": "pair_ETH/USD"}],
@@ -435,6 +518,14 @@ class CurrencyMonitor:
                 [{"text": "⚡️ XRP/USD", "callback_data": "pair_XRP/USD"}],
                 [{"text": "🐕 DOGE/USD", "callback_data": "pair_DOGE/USD"}],
                 [{"text": "🏔 AVAX/USD", "callback_data": "pair_AVAX/USD"}],
+                [{"text": "———— НЕФТЬ ————", "callback_data": "noop"}],
+                [{"text": "🛢️ BRENT/USD", "callback_data": "pair_BRENT/USD"}],
+                [{"text": "🛢️ WTI/USD", "callback_data": "pair_WTI/USD"}],
+                [{"text": "———— ИНДЕКСЫ ————", "callback_data": "noop"}],
+                [{"text": "📈 S&P 500", "callback_data": "pair_S&P 500"}],
+                [{"text": "📊 NASDAQ", "callback_data": "pair_NASDAQ"}],
+                [{"text": "———— ТОВАРЫ ————", "callback_data": "noop"}],
+                [{"text": "🌽 CORN/USD", "callback_data": "pair_CORN/USD"}],
                 [{"text": "◀️ Отмена", "callback_data": "cancel_alert"}]
             ]
         }
@@ -590,10 +681,14 @@ class CurrencyMonitor:
                 if rates:
                     msg = "📊 Текущие курсы:\n\n"
                     for pair, rate in sorted(rates.items()):
-                        if pair in ['BTC/USD', 'ETH/USD']:
+                        if pair in ['BTC/USD', 'ETH/USD', 'S&P 500', 'NASDAQ']:
                             msg += f"{pair}: ${rate:,.2f}\n"
-                        elif pair == 'XAU/USD':
+                        elif pair in ['XAU/USD', 'XAG/USD']:
                             msg += f"{pair}: ${rate:,.2f}\n"
+                        elif pair in ['BRENT/USD', 'WTI/USD']:
+                            msg += f"{pair}: ${rate:.2f}\n"
+                        elif pair == 'CORN/USD':
+                            msg += f"{pair}: ${rate:.2f}\n"
                         elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
                             msg += f"{pair}: ${rate:.2f}\n"
                         elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
@@ -629,10 +724,12 @@ class CurrencyMonitor:
                     
                     hints = {
                         'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                        'EUR/GBP': '0.87', 'XAU/USD': '5160', 'BTC/USD': '67000',
-                        'ETH/USD': '1950', 'SOL/USD': '84', 'BNB/USD': '610',
-                        'LINK/USD': '8.6', 'TON/USD': '1.35', 'XRP/USD': '1.40',
-                        'DOGE/USD': '0.098', 'AVAX/USD': '9.1'
+                        'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
+                        'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
+                        'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
+                        'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
+                        'BRENT/USD': '82', 'WTI/USD': '78', 'S&P 500': '5100',
+                        'NASDAQ': '18000', 'CORN/USD': '4.50'
                     }
                     hint = hints.get(pair, '1.0')
                     
@@ -694,7 +791,7 @@ class CurrencyMonitor:
                 
                 current = rates[pair]
                 
-                if pair in ['BTC/USD', 'ETH/USD', 'XAU/USD']:
+                if pair in ['BTC/USD', 'ETH/USD', 'XAU/USD', 'S&P 500', 'NASDAQ']:
                     if abs(current - target) / target < 0.0001:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
@@ -799,7 +896,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото (4 источника) + криптовалюты")
+        logger.info(f"📊 Пары: фиат + металлы + крипта + нефть + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
