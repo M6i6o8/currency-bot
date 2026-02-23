@@ -26,7 +26,7 @@ TWELVEDATA_KEY = os.getenv('TWELVEDATA_KEY')
 
 # ===== НАСТРОЙКА ДОСТУПА =====
 ALLOWED_USER_IDS = [
-    5799391012,  # ЗАМЕНИ НА СВОЙ ID
+    5799391012,  # ТВОЙ ID
 ]
 
 DEFAULT_MODE = "public"  # public - открыт для всех, private - только для своих
@@ -672,27 +672,25 @@ class CurrencyMonitor:
                     pairs = sorted(rates.items())
                     
                     for idx, (pair, rate) in enumerate(pairs):
+                        # Чередование с тегом <pre> для нечетных строк
+                        if idx % 2 == 0:
+                            line = f"• {pair}: "
+                        else:
+                            line = f"• <pre>{pair}:</pre> "
+                        
                         # Форматируем цену в зависимости от пары
                         if pair in ['BTC/USD', 'ETH/USD', 'S&P 500', 'NASDAQ']:
-                            formatted_rate = f"${rate:,.2f}"
+                            msg += line + f"${rate:,.2f}\n"
                         elif pair in ['XAU/USD', 'XAG/USD']:
-                            formatted_rate = f"${rate:,.2f}"
+                            msg += line + f"${rate:,.2f}\n"
                         elif pair == 'CORN/USD':
-                            formatted_rate = f"${rate:.2f}"
+                            msg += line + f"${rate:.2f}\n"
                         elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
-                            formatted_rate = f"${rate:.2f}"
+                            msg += line + f"${rate:.2f}\n"
                         elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
-                            formatted_rate = f"${rate:.4f}"
+                            msg += line + f"${rate:.4f}\n"
                         else:
-                            formatted_rate = f"{rate:.4f}"
-                        
-                        # Чередование: обычный / жирный (и пара, и значение)
-                        if idx % 2 == 0:
-                            # Четные строки - обычные
-                            msg += f"• {pair}: {formatted_rate}\n"
-                        else:
-                            # Нечетные строки - жирные
-                            msg += f"• <b>{pair}: {formatted_rate}</b>\n"
+                            msg += line + f"{rate:.4f}\n"
                     
                     keyboard = {
                         "inline_keyboard": [
@@ -895,7 +893,7 @@ class CurrencyMonitor:
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
-        logger.info(f"🦓 Режим 'жирный через один' для текущих курсов")
+        logger.info(f"🦓 Режим 'зебра' для текущих курсов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
