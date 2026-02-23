@@ -116,7 +116,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 5160.0,  # Обновленная цена золота
+            'XAU/USD': 5160.0,
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -182,84 +182,45 @@ class CurrencyMonitor:
             return None
     
     async def fetch_gold_price(self):
-        """Получает цену золота из трех надежных источников: Bybit, OKX, Pyth"""
+        """Получает цену золота через Gold-API (бесплатно, без ключа)"""
         try:
             session = await self.get_session()
             
-            sources = [
-                {
-                    # Источник 1: Bybit (линейные фьючерсы)
-                    'name': 'Bybit',
-                    'url': 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=XAUUSD',
-                    'parser': lambda data: float(data['result']['list'][0]['lastPrice']) if data and 'result' in data and data['result']['list'] else None
-                },
-                {
-                    # Источник 2: OKX (бессрочные фьючерсы XAUUSD)
-                    'name': 'OKX',
-                    'url': 'https://www.okx.com/api/v5/market/ticker?instId=XAUUSD',
-                    'parser': lambda data: float(data['data'][0]['last']) if data and 'data' in data and data['data'] else None
-                },
-                {
-                    # Источник 3: Pyth Network (институциональные данные)
-                    'name': 'Pyth',
-                    'url': 'https://api.pyth.network/price_feeds?query=gold',
-                    'is_pyth': True,
-                }
-            ]
+            # Gold-API.com — 1000 запросов в месяц бесплатно
+            url = "https://www.gold-api.com/api/current"
             
-            # Сначала пробуем Bybit и OKX (простые API)
-            for source in sources[:2]:
-                try:
-                    async with session.get(source['url'], timeout=10) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            price = source['parser'](data)
-                            
-                            if price and price > 1000 and price < 10000:
-                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['name']})")
-                                self.last_successful_rates['XAU/USD'] = price
-                                return price
-                            else:
-                                logger.warning(f"⚠️ {source['name']} вернул некорректную цену: {price}")
-                    await asyncio.sleep(1)  # Небольшая задержка между запросами
-                except Exception as e:
-                    logger.warning(f"❌ {source['name']} failed: {e}")
-                    continue
-            
-            # Если Bybit и OKX не сработали, пробуем Pyth (сложнее, нужно найти ID фида)
-            try:
-                # Сначала получаем список фидов по золоту
-                async with session.get('https://api.pyth.network/price_feeds?query=gold', timeout=10) as response:
-                    if response.status == 200:
-                        feeds = await response.json()
-                        
-                        # Ищем фид для XAU/USD
-                        gold_feed = None
-                        for feed in feeds:
-                            if feed['attributes']['symbol'] == 'Crypto.XAU/USD':
-                                gold_feed = feed
-                                break
-                        
-                        if gold_feed:
-                            feed_id = gold_feed['id']
-                            
-                            # Получаем цену по фиду
-                            async with session.get(f'https://api.pyth.network/price_feeds/{feed_id}/price', timeout=10) as price_response:
-                                if price_response.status == 200:
-                                    price_data = await price_response.json()
-                                    price = float(price_data['price']['price']) * (10 ** price_data['price']['expo'])
-                                    
-                                    if price and price > 1000 and price < 10000:
-                                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Pyth Network)")
-                                        self.last_successful_rates['XAU/USD'] = price
-                                        return price
-            except Exception as e:
-                logger.warning(f"❌ Pyth failed: {e}")
-            
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    price = float(data['gold_price_usd'])
+                    
+                    if price and price > 1000 and price < 10000:
+                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Gold-API)")
+                        self.last_successful_rates['XAU/USD'] = price
+                        return price
+                    else:
+                        logger.warning(f"⚠️ Gold-API вернул некорректную цену: {price}")
+                else:
+                    logger.warning(f"⚠️ Gold-API вернул статус {response.status}")
+                    
         except Exception as e:
-            logger.error(f"Gold API error: {e}")
+            logger.error(f"❌ Gold-API error: {e}")
         
-        # Если все источники упали, возвращаем последнее известное значение
+        # Запасной вариант — Metals.live (если Gold-API упал)
+        try:
+            url = "https://api.metals.live/v1/spot/gold"
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    price = float(data[0]['price'])
+                    if price and price > 1000 and price < 10000:
+                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Metals.live)")
+                        self.last_successful_rates['XAU/USD'] = price
+                        return price
+        except Exception as e:
+            logger.error(f"❌ Metals.live error: {e}")
+        
+        # Если всё упало, возвращаем кэш
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
         return self.last_successful_rates.get('XAU/USD', 5160.0)
     
@@ -607,7 +568,7 @@ class CurrencyMonitor:
                     "🤝 <b>СОТРУДНИЧЕСТВО</b>\n\n"
                     "📊 Нравится бот? Хочешь такой же для своих целей?\n"
                     "💎 Помогу с разработкой, настройкой, доработкой\n\n"
-                    "📩 Пиши: @Maranafa2023 - обсудим детали\n\n"
+                    "📩 Пиши: @Maranafa2023 - обсудим детали"
                 )
                 await self.send_telegram_message(chat_id, collab_text)
             elif data == "cancel_alert":
@@ -792,7 +753,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото (Bybit/OKX/Pyth) + криптовалюты")
+        logger.info(f"📊 Пары: фиат + золото (Gold-API) + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
