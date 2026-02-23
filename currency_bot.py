@@ -181,44 +181,90 @@ class CurrencyMonitor:
             logger.error(f"Binance API error: {e}")
             return None
     
+    def parse_vn_gold(self, data):
+        """Парсит цену из вьетнамского API (запасной вариант)"""
+        try:
+            if data and 'data' in data and data['data']:
+                vnd_price = float(data['data'][0]['buy'])
+                usd_price = vnd_price / 25400
+                return usd_price
+        except:
+            return None
+        return None
+    
     async def fetch_gold_price(self):
-        """Получает цену золота через Gold-API (бесплатно, без ключа)"""
+        """Получает цену золота из нескольких рабочих источников"""
         try:
             session = await self.get_session()
             
-            # Gold-API.com — 1000 запросов в месяц бесплатно
-            url = "https://www.gold-api.com/api/current"
+            sources = [
+                {
+                    # Источник 1: gold-api.com (самый надежный, без ключа)
+                    'name': 'Gold-API.com',
+                    'url': 'https://api.gold-api.com/price/XAU',
+                    'parser': lambda data: float(data['price']) if data and 'price' in data else None
+                },
+                {
+                    # Источник 2: metals-api.com (нужен бесплатный ключ)
+                    'name': 'Metals-API',
+                    'url': 'https://api.metals-api.com/v1/latest?access_key=free&base=USD&symbols=XAU',
+                    'parser': lambda data: 1.0 / float(data['rates']['XAU']) if data and 'rates' in data and 'XAU' in data['rates'] else None
+                },
+                {
+                    # Источник 3: FreeGoldPrice.org (бесплатно, без ключа)
+                    'name': 'FreeGoldPrice',
+                    'url': 'https://freegoldprice.org/api/current',
+                    'parser': lambda data: float(data['gold_price_usd']) if data and 'gold_price_usd' in data else None
+                },
+                {
+                    # Источник 4: vnappmob (азиатский сервер, быстрый)
+                    'name': 'VNAppMob',
+                    'url': 'https://api.vnappmob.com/api/v2/gold/sjc',
+                    'parser': self.parse_vn_gold
+                }
+            ]
             
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    price = float(data['gold_price_usd'])
-                    
-                    if price and price > 1000 and price < 10000:
-                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Gold-API)")
-                        self.last_successful_rates['XAU/USD'] = price
-                        return price
-                    else:
-                        logger.warning(f"⚠️ Gold-API вернул некорректную цену: {price}")
-                else:
-                    logger.warning(f"⚠️ Gold-API вернул статус {response.status}")
-                    
+            for source in sources:
+                try:
+                    logger.info(f"Пробуем источник: {source['name']}")
+                    async with session.get(source['url'], timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if source['name'] == 'VNAppMob':
+                                price = source['parser'](data)
+                            else:
+                                price = source['parser'](data)
+                            
+                            if price and price > 1000 and price < 10000:
+                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['name']})")
+                                self.last_successful_rates['XAU/USD'] = price
+                                return price
+                            else:
+                                logger.warning(f"⚠️ {source['name']} вернул некорректную цену: {price}")
+                        else:
+                            logger.warning(f"⚠️ {source['name']} вернул статус {response.status}")
+                except Exception as e:
+                    logger.warning(f"❌ {source['name']} failed: {e}")
+                    continue
+            
+            # Запасной вариант — парсинг HTML
+            try:
+                url = "https://www.goldprice.org/live-gold-price"
+                async with session.get(url, timeout=10) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        match = re.search(r'XAUUSD.*?(\d+\.?\d*)', html)
+                        if match:
+                            price = float(match.group(1))
+                            if 1000 < price < 10000:
+                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: GoldPrice.org HTML)")
+                                self.last_successful_rates['XAU/USD'] = price
+                                return price
+            except Exception as e:
+                logger.warning(f"❌ HTML parsing error: {e}")
+            
         except Exception as e:
-            logger.error(f"❌ Gold-API error: {e}")
-        
-        # Запасной вариант — Metals.live (если Gold-API упал)
-        try:
-            url = "https://api.metals.live/v1/spot/gold"
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    price = float(data[0]['price'])
-                    if price and price > 1000 and price < 10000:
-                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Metals.live)")
-                        self.last_successful_rates['XAU/USD'] = price
-                        return price
-        except Exception as e:
-            logger.error(f"❌ Metals.live error: {e}")
+            logger.error(f"Gold API error: {e}")
         
         # Если всё упало, возвращаем кэш
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
@@ -753,7 +799,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото (Gold-API) + криптовалюты")
+        logger.info(f"📊 Пары: фиат + золото (4 источника) + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
