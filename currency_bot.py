@@ -588,13 +588,13 @@ class CurrencyMonitor:
             
             del self.alert_states[str(chat_id)]
             
+            # Только подтверждение, без главного меню
             await self.send_telegram_message(
                 chat_id,
                 f"✅ Алерт создан!\n\n"
                 f"📊 {pair}\n"
                 f"🎯 Цель: {target}"
             )
-            await self.show_main_menu(chat_id)
             
         except ValueError:
             await self.send_telegram_message(chat_id, "❌ Это не число! Введи цену (например: 1.10)")
