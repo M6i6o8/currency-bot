@@ -93,7 +93,6 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None):
     
     if pair:
         stats[user_id]['pairs'].append(pair)
-        # Храним только последние 50 пар для статистики
         if len(stats[user_id]['pairs']) > 50:
             stats[user_id]['pairs'] = stats[user_id]['pairs'][-50:]
     
@@ -117,7 +116,7 @@ class CurrencyMonitor:
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
-            'XAU/USD': 5100.0,  # Реальная цена золота
+            'XAU/USD': 5160.0,  # Обновленная цена золота
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
@@ -183,75 +182,86 @@ class CurrencyMonitor:
             return None
     
     async def fetch_gold_price(self):
-        """Получает реальную цену золота из РАБОЧИХ источников"""
+        """Получает цену золота из трех надежных источников: Bybit, OKX, Pyth"""
         try:
             session = await self.get_session()
             
             sources = [
                 {
-                    'url': 'https://goldprice.today/api.php?data=live',
-                    'parser': lambda data: float(data['USD']['gold_price']) if data and 'USD' in data and 'gold_price' in data['USD'] else None
+                    # Источник 1: Bybit (линейные фьючерсы)
+                    'name': 'Bybit',
+                    'url': 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=XAUUSD',
+                    'parser': lambda data: float(data['result']['list'][0]['lastPrice']) if data and 'result' in data and data['result']['list'] else None
                 },
                 {
-                    'url': 'https://api.itick.org/gold?apikey=demo',
-                    'parser': lambda data: float(data['price']) if data and 'price' in data else None
+                    # Источник 2: OKX (бессрочные фьючерсы XAUUSD)
+                    'name': 'OKX',
+                    'url': 'https://www.okx.com/api/v5/market/ticker?instId=XAUUSD',
+                    'parser': lambda data: float(data['data'][0]['last']) if data and 'data' in data and data['data'] else None
                 },
                 {
-                    'url': 'https://www.goldapi.io/api/XAU/USD',
-                    'headers': {'x-access-token': 'goldapi-3u6v8w9x2y4z5a7b8c9d0e1f2g3h4i5j'},
-                    'parser': lambda data: float(data.get('price', 0)) if data and data.get('price') else None
-                },
-                {
-                    'url': 'https://www.goldprice.org/live-gold-price',
-                    'html_parser': True,
-                    'parser': lambda html: self.parse_gold_from_html(html)
+                    # Источник 3: Pyth Network (институциональные данные)
+                    'name': 'Pyth',
+                    'url': 'https://api.pyth.network/price_feeds?query=gold',
+                    'is_pyth': True,
                 }
             ]
             
-            for source in sources:
+            # Сначала пробуем Bybit и OKX (простые API)
+            for source in sources[:2]:
                 try:
-                    headers = source.get('headers', {})
-                    async with session.get(source['url'], headers=headers, timeout=10) as response:
+                    async with session.get(source['url'], timeout=10) as response:
                         if response.status == 200:
-                            if source.get('html_parser', False):
-                                html = await response.text()
-                                price = source['parser'](html)
-                            else:
-                                data = await response.json()
-                                price = source['parser'](data)
+                            data = await response.json()
+                            price = source['parser'](data)
                             
                             if price and price > 1000 and price < 10000:
-                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['url'].split('/')[2]})")
+                                logger.info(f"✅ Золото: ${price:.2f}/унция (источник: {source['name']})")
+                                self.last_successful_rates['XAU/USD'] = price
                                 return price
+                            else:
+                                logger.warning(f"⚠️ {source['name']} вернул некорректную цену: {price}")
+                    await asyncio.sleep(1)  # Небольшая задержка между запросами
                 except Exception as e:
-                    logger.warning(f"Gold source {source['url']} failed: {e}")
+                    logger.warning(f"❌ {source['name']} failed: {e}")
                     continue
-                    
+            
+            # Если Bybit и OKX не сработали, пробуем Pyth (сложнее, нужно найти ID фида)
+            try:
+                # Сначала получаем список фидов по золоту
+                async with session.get('https://api.pyth.network/price_feeds?query=gold', timeout=10) as response:
+                    if response.status == 200:
+                        feeds = await response.json()
+                        
+                        # Ищем фид для XAU/USD
+                        gold_feed = None
+                        for feed in feeds:
+                            if feed['attributes']['symbol'] == 'Crypto.XAU/USD':
+                                gold_feed = feed
+                                break
+                        
+                        if gold_feed:
+                            feed_id = gold_feed['id']
+                            
+                            # Получаем цену по фиду
+                            async with session.get(f'https://api.pyth.network/price_feeds/{feed_id}/price', timeout=10) as price_response:
+                                if price_response.status == 200:
+                                    price_data = await price_response.json()
+                                    price = float(price_data['price']['price']) * (10 ** price_data['price']['expo'])
+                                    
+                                    if price and price > 1000 and price < 10000:
+                                        logger.info(f"✅ Золото: ${price:.2f}/унция (источник: Pyth Network)")
+                                        self.last_successful_rates['XAU/USD'] = price
+                                        return price
+            except Exception as e:
+                logger.warning(f"❌ Pyth failed: {e}")
+            
         except Exception as e:
             logger.error(f"Gold API error: {e}")
         
+        # Если все источники упали, возвращаем последнее известное значение
         logger.warning("⚠️ Все источники золота недоступны, использую кэш")
-        return self.last_successful_rates.get('XAU/USD', 5100.0)
-    
-    def parse_gold_from_html(self, html):
-        """Парсит цену золота из HTML"""
-        try:
-            patterns = [
-                r'XAUUSD.*?(\d+\.?\d*)',
-                r'gold-price.*?(\d+\.?\d*)',
-                r'price-value.*?(\d+\.?\d*)',
-                r'<span[^>]*class="[^"]*price[^"]*"[^>]*>(\d+\.?\d*)</span>'
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, html, re.IGNORECASE)
-                if match:
-                    price = float(match.group(1))
-                    if 1000 < price < 10000:
-                        return price
-        except Exception as e:
-            logger.error(f"HTML parsing error: {e}")
-        return None
+        return self.last_successful_rates.get('XAU/USD', 5160.0)
     
     async def fetch_from_fiat_api(self):
         """Получает курсы фиатных валют"""
@@ -357,7 +367,6 @@ class CurrencyMonitor:
         msg = "📊 <b>СТАТИСТИКА БОТА</b>\n\n"
         msg += f"👥 Всего пользователей: <b>{len(stats)}</b>\n"
         
-        # Общая статистика
         total_interactions = sum(u.get('interactions', 0) for u in stats.values())
         total_alerts = sum(u.get('alerts_created', 0) for u in stats.values())
         total_triggered = sum(u.get('alerts_triggered', 0) for u in stats.values())
@@ -366,7 +375,6 @@ class CurrencyMonitor:
         msg += f"🎯 Создано алертов: <b>{total_alerts}</b>\n"
         msg += f"⚡️ Сработало алертов: <b>{total_triggered}</b>\n\n"
         
-        # Топ пользователей по активности
         msg += "🏆 <b>Топ пользователей:</b>\n"
         top_users = sorted(stats.items(), key=lambda x: x[1].get('interactions', 0), reverse=True)[:5]
         
@@ -376,7 +384,6 @@ class CurrencyMonitor:
                 name += f" (@{data['username']})"
             msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n"
         
-        # Популярные пары
         msg += "\n📈 <b>Популярные пары:</b>\n"
         all_pairs = []
         for user_data in stats.values():
@@ -456,7 +463,6 @@ class CurrencyMonitor:
             user_alerts[user_id].append(alert)
             save_user_alerts(user_alerts)
             
-            # Обновляем статистику
             stats = load_user_stats()
             if user_id in stats:
                 stats[user_id]['alerts_created'] = stats[user_id].get('alerts_created', 0) + 1
@@ -511,12 +517,10 @@ class CurrencyMonitor:
             chat_id = msg['chat']['id']
             text = msg.get('text', '')
             
-            # Получаем данные пользователя
             username = msg['chat'].get('username', '')
             first_name = msg['chat'].get('first_name', '')
             last_name = msg['chat'].get('last_name', '')
             
-            # Обновляем статистику
             update_user_stats(chat_id, username, first_name, last_name)
             
             if not self.is_user_allowed(chat_id):
@@ -556,7 +560,6 @@ class CurrencyMonitor:
             chat_id = cb['message']['chat']['id']
             data = cb['data']
             
-            # Обновляем статистику для callback-запросов
             username = cb['from'].get('username', '')
             first_name = cb['from'].get('first_name', '')
             last_name = cb['from'].get('last_name', '')
@@ -619,7 +622,7 @@ class CurrencyMonitor:
                     
                     hints = {
                         'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                        'EUR/GBP': '0.87', 'XAU/USD': '5100', 'BTC/USD': '67000',
+                        'EUR/GBP': '0.87', 'XAU/USD': '5160', 'BTC/USD': '67000',
                         'ETH/USD': '1950', 'SOL/USD': '84', 'BNB/USD': '610',
                         'LINK/USD': '8.6', 'TON/USD': '1.35', 'XRP/USD': '1.40',
                         'DOGE/USD': '0.098', 'AVAX/USD': '9.1'
@@ -695,7 +698,6 @@ class CurrencyMonitor:
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
                         
-                        # Обновляем статистику срабатываний
                         if user_id in stats:
                             stats[user_id]['alerts_triggered'] = stats[user_id].get('alerts_triggered', 0) + 1
                         
@@ -790,7 +792,7 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + золото (реальное время) + криптовалюты")
+        logger.info(f"📊 Пары: фиат + золото (Bybit/OKX/Pyth) + криптовалюты")
         logger.info(f"🎯 Точность: максимальная")
         
         app = web.Application()
