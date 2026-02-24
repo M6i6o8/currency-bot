@@ -569,7 +569,7 @@ class CurrencyMonitor:
                     [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
                     [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
                     [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
-                    [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
+                    [{"text": "📩 Обратная связь", "callback_data": "collaboration"}]
                 ]
             }
             await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
@@ -625,7 +625,7 @@ class CurrencyMonitor:
         keyboard["inline_keyboard"].append([
             {"text": "📋 Мои алерты", "callback_data": "show_alerts"},
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"},
-            {"text": "🤝 Сотрудничество", "callback_data": "collaboration"}
+            {"text": "📩 Обратная связь", "callback_data": "collaboration"}
         ])
         
         await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для создания алерта:", keyboard)
@@ -802,13 +802,13 @@ class CurrencyMonitor:
                 await self.list_alerts(chat_id)
             elif data == "collaboration":
                 collab_text = (
-                    "🤝 <b>СОТРУДНИЧЕСТВО</b>\n\n"
-                    "📊 Нравится бот? Хочешь такой же для своих целей?\n"
-                    "💎 Помогу с разработкой, настройкой, доработкой\n\n"
-                    "📩 Пиши: @Maranafa2023 - обсудим детали"
+                    "📩 <b>Обратная связь</b>\n\n"
+                    "📊 Нашли баг? Есть идея по улучшению бота?\n"
+                    "💎 Хотите задать вопрос или предложить сотрудничество?\n\n"
+                    "✉️ Пишите: @Maranafa2023"
                 )
                 await self.send_telegram_message(chat_id, collab_text)
-                await self.show_main_menu(chat_id)
+                # НЕТ show_main_menu здесь!
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
