@@ -74,7 +74,7 @@ def save_user_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
-def update_user_stats(chat_id, username, first_name, last_name, pair=None):
+def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None):
     """Обновляет статистику пользователя"""
     stats = load_user_stats()
     user_id = str(chat_id)
@@ -88,7 +88,9 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None):
             'interactions': 0,
             'alerts_created': 0,
             'alerts_triggered': 0,
-            'pairs': []
+            'pairs': [],
+            'timezone': 'Europe/Moscow',  # По умолчанию Москва
+            'timezone_name': 'Москва (UTC+3)'
         }
     
     stats[user_id]['last_seen'] = datetime.now().isoformat()
@@ -99,15 +101,48 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None):
         if len(stats[user_id]['pairs']) > 50:
             stats[user_id]['pairs'] = stats[user_id]['pairs'][-50:]
     
+    if timezone:
+        stats[user_id]['timezone'] = timezone
+        stats[user_id]['timezone_name'] = TIMEZONES.get(timezone, {}).get('name', timezone)
+    
     save_user_stats(stats)
     return stats[user_id]
+
+def get_user_timezone(user_id):
+    """Возвращает часовой пояс пользователя"""
+    stats = load_user_stats()
+    user_id = str(user_id)
+    if user_id in stats and 'timezone' in stats[user_id]:
+        return stats[user_id]['timezone']
+    return 'Europe/Moscow'  # По умолчанию Москва
 
 # Глобальные переменные
 user_alerts = load_user_alerts()
 last_notifications = {}
 
-# Московский часовой пояс
+# Московский часовой пояс для внутренних логов
 MSK_TZ = ZoneInfo('Europe/Moscow')
+
+# Словарь доступных часовых поясов с городами
+TIMEZONES = {
+    'Europe/Kaliningrad': {'name': 'Калининград (UTC+2)', 'offset': 2},
+    'Europe/Moscow': {'name': 'Москва (UTC+3)', 'offset': 3},
+    'Europe/Samara': {'name': 'Самара (UTC+4)', 'offset': 4},
+    'Asia/Yekaterinburg': {'name': 'Екатеринбург (UTC+5)', 'offset': 5},
+    'Asia/Omsk': {'name': 'Омск (UTC+6)', 'offset': 6},
+    'Asia/Krasnoyarsk': {'name': 'Красноярск (UTC+7)', 'offset': 7},
+    'Asia/Irkutsk': {'name': 'Иркутск (UTC+8)', 'offset': 8},
+    'Asia/Yakutsk': {'name': 'Якутск (UTC+9)', 'offset': 9},
+    'Asia/Vladivostok': {'name': 'Владивосток (UTC+10)', 'offset': 10},
+    'Asia/Srednekolymsk': {'name': 'Магадан (UTC+11)', 'offset': 11},
+    'Asia/Kamchatka': {'name': 'Камчатка (UTC+12)', 'offset': 12},
+    'Europe/London': {'name': 'Лондон (UTC+0)', 'offset': 0},
+    'Europe/Berlin': {'name': 'Берлин (UTC+1)', 'offset': 1},
+    'America/New_York': {'name': 'Нью-Йорк (UTC-5)', 'offset': -5},
+    'America/Chicago': {'name': 'Чикаго (UTC-6)', 'offset': -6},
+    'America/Denver': {'name': 'Денвер (UTC-7)', 'offset': -7},
+    'America/Los_Angeles': {'name': 'Лос-Анджелес (UTC-8)', 'offset': -8},
+}
 
 class CurrencyMonitor:
     def __init__(self):
@@ -433,6 +468,46 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Error sending keyboard: {e}")
     
+    async def show_timezone_menu(self, chat_id):
+        """Показывает меню выбора часового пояса"""
+        keyboard = {"inline_keyboard": []}
+        
+        # Группируем пояса по 3 в ряд для компактности
+        tz_list = list(TIMEZONES.items())
+        for i in range(0, len(tz_list), 2):
+            row = []
+            for tz_key, tz_info in tz_list[i:i+2]:
+                row.append({"text": tz_info['name'], "callback_data": f"tz_{tz_key}"})
+            keyboard["inline_keyboard"].append(row)
+        
+        keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
+        
+        await self.send_telegram_message_with_keyboard(
+            chat_id,
+            "🌍 <b>Выбери свой часовой пояс:</b>\n\n"
+            "От этого зависит время в уведомлениях. Можно изменить в любой момент.",
+            keyboard
+        )
+    
+    async def set_user_timezone(self, chat_id, tz_key):
+        """Устанавливает часовой пояс пользователя"""
+        if tz_key in TIMEZONES:
+            # Обновляем статистику с новым часовым поясом
+            stats = load_user_stats()
+            user_id = str(chat_id)
+            if user_id in stats:
+                stats[user_id]['timezone'] = tz_key
+                stats[user_id]['timezone_name'] = TIMEZONES[tz_key]['name']
+                save_user_stats(stats)
+            
+            await self.send_telegram_message(
+                chat_id,
+                f"✅ Часовой пояс установлен: {TIMEZONES[tz_key]['name']}\n\n"
+                f"Теперь все уведомления будут приходить с твоим местным временем."
+            )
+        else:
+            await self.send_telegram_message(chat_id, "❌ Ошибка: часовой пояс не найден")
+    
     async def show_stats(self, chat_id):
         """Показывает статистику использования бота (только для админа)"""
         if not self.is_admin(chat_id):
@@ -463,7 +538,8 @@ class CurrencyMonitor:
             name = data.get('first_name', '')
             if data.get('username'):
                 name += f" (@{data['username']})"
-            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n"
+            tz_name = data.get('timezone_name', 'Не указан')
+            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ. ({tz_name})\n"
         
         msg += "\n📈 <b>Популярные пары:</b>\n"
         all_pairs = []
@@ -486,6 +562,7 @@ class CurrencyMonitor:
                 "inline_keyboard": [
                     [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
                     [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
+                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
                     [{"text": "🤝 Сотрудничество", "callback_data": "collaboration"}]
                 ]
             }
@@ -541,6 +618,7 @@ class CurrencyMonitor:
         # Кнопки внизу
         keyboard["inline_keyboard"].append([
             {"text": "📋 Мои алерты", "callback_data": "show_alerts"},
+            {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"},
             {"text": "🤝 Сотрудничество", "callback_data": "collaboration"}
         ])
         
@@ -645,6 +723,7 @@ class CurrencyMonitor:
             first_name = msg['chat'].get('first_name', '')
             last_name = msg['chat'].get('last_name', '')
             
+            # Обновляем статистику
             update_user_stats(chat_id, username, first_name, last_name)
             
             if not self.is_user_allowed(chat_id):
@@ -659,6 +738,10 @@ class CurrencyMonitor:
             
             if text == '/stats':
                 await self.show_stats(chat_id)
+                return
+            
+            if text == '/timezone':
+                await self.show_timezone_menu(chat_id)
                 return
             
             if str(chat_id) in self.alert_states:
@@ -697,6 +780,12 @@ class CurrencyMonitor:
             await session.post(url, json={'callback_query_id': cb['id']})
             
             if data == "main_menu":
+                await self.show_main_menu(chat_id)
+            elif data == "show_timezone":
+                await self.show_timezone_menu(chat_id)
+            elif data.startswith("tz_"):
+                tz_key = data.replace("tz_", "")
+                await self.set_user_timezone(chat_id, tz_key)
                 await self.show_main_menu(chat_id)
             elif data == "start_alert":
                 await self.start_alert_creation(chat_id)
@@ -776,8 +865,15 @@ class CurrencyMonitor:
         """Проверяет достижение целей"""
         notifications = []
         stats = load_user_stats()
+        now_utc = datetime.now(ZoneInfo('UTC'))
         
         for user_id, alerts in user_alerts.items():
+            # Получаем часовой пояс пользователя (по умолчанию Москва)
+            user_tz = stats.get(str(user_id), {}).get('timezone', 'Europe/Moscow')
+            tz_info = TIMEZONES.get(user_tz, TIMEZONES['Europe/Moscow'])
+            user_time = now_utc.astimezone(ZoneInfo(user_tz))
+            current_time = user_time.strftime('%H:%M:%S')
+            
             for alert in alerts:
                 if not alert.get('active', False):
                     continue
@@ -798,7 +894,8 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.2f}\n"
-                            f"💰 Текущий: {current:.2f}"
+                            f"💰 Текущий: {current:.2f}\n"
+                            f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -815,7 +912,8 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.4f}\n"
-                            f"💰 Текущий: {current:.4f}"
+                            f"💰 Текущий: {current:.4f}\n"
+                            f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -832,7 +930,8 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.5f}\n"
-                            f"💰 Текущий: {current:.5f}"
+                            f"💰 Текущий: {current:.5f}\n"
+                            f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
                         alert['active'] = False
@@ -899,6 +998,7 @@ class CurrencyMonitor:
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
+        logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
