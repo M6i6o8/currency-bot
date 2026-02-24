@@ -505,19 +505,24 @@ class CurrencyMonitor:
                 f"✅ Часовой пояс установлен: {TIMEZONES[tz_key]['name']}\n\n"
                 f"Теперь все уведомления будут приходить с твоим местным временем."
             )
+            # После установки пояса возвращаем в главное меню
+            await self.show_main_menu(chat_id)
         else:
             await self.send_telegram_message(chat_id, "❌ Ошибка: часовой пояс не найден")
+            await self.show_main_menu(chat_id)
     
     async def show_stats(self, chat_id):
         """Показывает статистику использования бота (только для админа)"""
         if not self.is_admin(chat_id):
             await self.send_telegram_message(chat_id, "❌ У тебя нет доступа к статистике")
+            await self.show_main_menu(chat_id)
             return
         
         stats = load_user_stats()
         
         if not stats:
             await self.send_telegram_message(chat_id, "📊 Статистика пока пуста")
+            await self.show_main_menu(chat_id)
             return
         
         msg = "📊 <b>СТАТИСТИКА БОТА</b>\n\n"
@@ -552,6 +557,7 @@ class CurrencyMonitor:
                 msg += f"• {pair}: {count} раз(а)\n"
         
         await self.send_telegram_message(chat_id, msg)
+        await self.show_main_menu(chat_id)
     
     async def show_main_menu(self, chat_id):
         """Главное меню с ценами на кнопках и кнопками внизу"""
@@ -636,11 +642,13 @@ class CurrencyMonitor:
             
             if str(chat_id) not in self.alert_states:
                 await self.send_telegram_message(chat_id, "❌ Ошибка: начни сначала /start")
+                await self.show_main_menu(chat_id)
                 return
                 
             state = self.alert_states[str(chat_id)]
             if 'pair' not in state:
                 await self.send_telegram_message(chat_id, "❌ Ошибка: выбери пару сначала")
+                await self.show_main_menu(chat_id)
                 return
                 
             pair = state['pair']
@@ -666,7 +674,7 @@ class CurrencyMonitor:
             
             del self.alert_states[str(chat_id)]
             
-            # Простое подтверждение без кнопки
+            # Подтверждение создания алерта
             await self.send_telegram_message(
                 chat_id,
                 f"✅ Алерт создан!\n\n"
@@ -674,11 +682,16 @@ class CurrencyMonitor:
                 f"🎯 Цель: {target}"
             )
             
+            # Возвращаем в главное меню
+            await self.show_main_menu(chat_id)
+            
         except ValueError:
             await self.send_telegram_message(chat_id, "❌ Это не число! Введи цену (например: 1.10)")
+            # Оставляем состояние активным, даём ещё попытку
         except Exception as e:
             logger.error(f"Error in alert input: {e}")
             await self.send_telegram_message(chat_id, "❌ Ошибка при создании алерта")
+            await self.show_main_menu(chat_id)
     
     async def list_alerts(self, chat_id):
         user_id = str(chat_id)
@@ -686,6 +699,7 @@ class CurrencyMonitor:
         
         if not alerts:
             await self.send_telegram_message(chat_id, "📭 У тебя пока нет алертов")
+            await self.show_main_menu(chat_id)
             return
         
         keyboard = {"inline_keyboard": []}
@@ -773,13 +787,15 @@ class CurrencyMonitor:
             await session.post(url, json={'callback_query_id': cb['id']})
             
             if data == "main_menu":
+                if str(chat_id) in self.alert_states:
+                    del self.alert_states[str(chat_id)]
                 await self.show_main_menu(chat_id)
             elif data == "show_timezone":
                 await self.show_timezone_menu(chat_id)
             elif data.startswith("tz_"):
                 tz_key = data.replace("tz_", "")
                 await self.set_user_timezone(chat_id, tz_key)
-                await self.show_main_menu(chat_id)
+                # show_main_menu уже внутри set_user_timezone
             elif data == "start_alert":
                 await self.start_alert_creation(chat_id)
             elif data == "show_alerts":
@@ -792,6 +808,7 @@ class CurrencyMonitor:
                     "📩 Пиши: @Maranafa2023 - обсудим детали"
                 )
                 await self.send_telegram_message(chat_id, collab_text)
+                await self.show_main_menu(chat_id)
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
@@ -816,9 +833,17 @@ class CurrencyMonitor:
                 }
                 hint = hints.get(pair, '1.0')
                 
-                await self.send_telegram_message(
+                # Кнопка отмены при вводе цены
+                cancel_keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "◀️ Отмена", "callback_data": "cancel_alert"}]
+                    ]
+                }
+                
+                await self.send_telegram_message_with_keyboard(
                     chat_id,
-                    f"💰 Пара: {pair}\n\n📝 Введи целевую цену:\nНапример: {hint}"
+                    f"💰 Пара: {pair}\n\n📝 Введи целевую цену:\nНапример: {hint}",
+                    cancel_keyboard
                 )
             elif data.startswith("delete_"):
                 try:
@@ -828,12 +853,16 @@ class CurrencyMonitor:
                         user_alerts[user_id].pop(num)
                         save_user_alerts(user_alerts)
                         await self.send_telegram_message(chat_id, f"✅ Алерт {num+1} удален")
+                        # После удаления показываем обновленный список
                         await self.list_alerts(chat_id)
                 except Exception as e:
                     logger.error(f"Delete error: {e}")
+                    await self.show_main_menu(chat_id)
                     
         except Exception as e:
             logger.error(f"Callback error: {e}")
+            # В случае ошибки возвращаем в главное меню
+            await self.show_main_menu(chat_id)
     
     async def get_updates(self):
         try:
@@ -989,6 +1018,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
+        logger.info(f"🔄 Автоматическое возвращение в главное меню после всех действий")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
