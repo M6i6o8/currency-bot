@@ -472,7 +472,7 @@ class CurrencyMonitor:
         """Показывает меню выбора часового пояса"""
         keyboard = {"inline_keyboard": []}
         
-        # Группируем пояса по 3 в ряд для компактности
+        # Группируем пояса по 2 в ряд для компактности
         tz_list = list(TIMEZONES.items())
         for i in range(0, len(tz_list), 2):
             row = []
@@ -666,19 +666,12 @@ class CurrencyMonitor:
             
             del self.alert_states[str(chat_id)]
             
-            # Подтверждение с кнопкой возврата в меню
-            keyboard = {
-                "inline_keyboard": [
-                    [{"text": "📋 К списку пар", "callback_data": "main_menu"}]
-                ]
-            }
-            
-            await self.send_telegram_message_with_keyboard(
+            # Простое подтверждение без кнопки
+            await self.send_telegram_message(
                 chat_id,
                 f"✅ Алерт создан!\n\n"
                 f"📊 {pair}\n"
-                f"🎯 Цель: {target}",
-                keyboard
+                f"🎯 Цель: {target}"
             )
             
         except ValueError:
@@ -894,7 +887,6 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.2f}\n"
-                            f"💰 Текущий: {current:.2f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
@@ -912,7 +904,6 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.4f}\n"
-                            f"💰 Текущий: {current:.4f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
@@ -930,7 +921,6 @@ class CurrencyMonitor:
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
                             f"📊 {pair}\n"
                             f"🎯 Цель: {target:.5f}\n"
-                            f"💰 Текущий: {current:.5f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
                         notifications.append((int(user_id), msg))
