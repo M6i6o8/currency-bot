@@ -631,7 +631,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с индикацией активных алертов, кнопками закрепления слева и корзиной справа"""
+        """Главное меню: пары слева, кнопки управления справа"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -681,8 +681,7 @@ class CurrencyMonitor:
                 all_pairs_data.append({
                     'pair': pair,
                     'text': text,
-                    'alert_count': alert_count,
-                    'order': 0  # будет переопределено
+                    'alert_count': alert_count
                 })
         
         # Металлы
@@ -697,8 +696,7 @@ class CurrencyMonitor:
                 all_pairs_data.append({
                     'pair': pair,
                     'text': text,
-                    'alert_count': alert_count,
-                    'order': 0
+                    'alert_count': alert_count
                 })
         
         # Крипта
@@ -722,8 +720,7 @@ class CurrencyMonitor:
                 all_pairs_data.append({
                     'pair': pair,
                     'text': text,
-                    'alert_count': alert_count,
-                    'order': 0
+                    'alert_count': alert_count
                 })
         
         # Индексы
@@ -738,8 +735,7 @@ class CurrencyMonitor:
                 all_pairs_data.append({
                     'pair': pair,
                     'text': text,
-                    'alert_count': alert_count,
-                    'order': 0
+                    'alert_count': alert_count
                 })
         
         # Товары
@@ -752,11 +748,10 @@ class CurrencyMonitor:
             all_pairs_data.append({
                 'pair': 'CORN/USD',
                 'text': text,
-                'alert_count': alert_count,
-                'order': 0
+                'alert_count': alert_count
             })
         
-        # Разделяем на закрепленные и обычные
+        # Сортируем все пары (сначала закрепленные, потом остальные по алфавиту)
         pinned_items = []
         regular_items = []
         
@@ -766,34 +761,36 @@ class CurrencyMonitor:
             else:
                 regular_items.append(item)
         
-        # Сортируем каждый список по алфавиту
         pinned_items.sort(key=lambda x: x['pair'])
         regular_items.sort(key=lambda x: x['pair'])
         
-        # Объединяем
         sorted_pairs = pinned_items + regular_items
         
-        # Формируем клавиатуру
+        # Формируем клавиатуру: слева пара, справа кнопки управления
         keyboard = {"inline_keyboard": []}
         
         for item in sorted_pairs:
             pair = item['pair']
             text = item['text']
             alert_count = item['alert_count']
+            is_pinned = pair in pinned_pairs
             
-            # Формируем строку с кнопками: [📌] [название пары] [🗑️ если есть алерты]
-            row = []
+            # Левая колонка: название пары
+            left_button = {"text": text, "callback_data": f"manage_{pair}"}
             
-            # Кнопка закрепления слева
-            row.append({"text": "📌", "callback_data": f"toggle_pin_{pair}"})
+            # Правая колонка: кнопки управления
+            right_buttons = []
             
-            # Кнопка с названием пары
-            row.append({"text": text, "callback_data": f"manage_{pair}"})
+            # Кнопка закрепления
+            pin_emoji = "📍" if is_pinned else "📌"
+            right_buttons.append({"text": pin_emoji, "callback_data": f"toggle_pin_{pair}"})
             
-            # Кнопка корзины справа (только если есть алерты)
+            # Кнопка корзины (только если есть алерты)
             if alert_count > 0:
-                row.append({"text": "🗑️", "callback_data": f"delete_all_{pair}"})
+                right_buttons.append({"text": "🗑️", "callback_data": f"delete_all_{pair}"})
             
+            # Объединяем в одну строку
+            row = [left_button] + right_buttons
             keyboard["inline_keyboard"].append(row)
         
         # Кнопки внизу
@@ -1227,8 +1224,8 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"📌 Закрепление нескольких пар (кнопка слева)")
-        logger.info(f"🗑️ Минимально узкая корзина справа")
+        logger.info(f"📌 Закрепление нескольких пар")
+        logger.info(f"🗑️ Кнопки управления справа")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
