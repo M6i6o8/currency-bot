@@ -631,7 +631,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню: пары слева, кнопки управления справа"""
+        """Главное меню с тремя колонками: значки слева и справа как кнопки"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -766,7 +766,7 @@ class CurrencyMonitor:
         
         sorted_pairs = pinned_items + regular_items
         
-        # Формируем клавиатуру: слева пара, справа кнопки управления
+        # Формируем клавиатуру с тремя колонками
         keyboard = {"inline_keyboard": []}
         
         for item in sorted_pairs:
@@ -775,23 +775,27 @@ class CurrencyMonitor:
             alert_count = item['alert_count']
             is_pinned = pair in pinned_pairs
             
-            # Левая колонка: название пары
-            left_button = {"text": text, "callback_data": f"manage_{pair}"}
+            # Создаем строку с тремя кнопками
+            row = []
             
-            # Правая колонка: кнопки управления
-            right_buttons = []
-            
-            # Кнопка закрепления
+            # Кнопка закрепления слева
             pin_emoji = "📍" if is_pinned else "📌"
-            right_buttons.append({"text": pin_emoji, "callback_data": f"toggle_pin_{pair}"})
+            row.append({"text": pin_emoji, "callback_data": f"toggle_pin_{pair}"})
             
-            # Кнопка корзины (только если есть алерты)
+            # Кнопка с названием пары по центру
+            row.append({"text": text, "callback_data": f"manage_{pair}"})
+            
+            # Кнопка корзины справа (если есть алерты)
             if alert_count > 0:
-                right_buttons.append({"text": "🗑️", "callback_data": f"delete_all_{pair}"})
+                row.append({"text": "🗑️", "callback_data": f"delete_all_{pair}"})
+            else:
+                # Пустая кнопка-заглушка для сохранения трех колонок
+                row.append({"text": "⬜", "callback_data": "noop"})
             
-            # Объединяем в одну строку
-            row = [left_button] + right_buttons
             keyboard["inline_keyboard"].append(row)
+        
+        # Добавляем обработчик для пустой кнопки
+        # (ничего не делает, просто заглушка)
         
         # Кнопки внизу
         keyboard["inline_keyboard"].append([
@@ -799,7 +803,7 @@ class CurrencyMonitor:
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
         ])
         
-        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для управления:", keyboard)
+        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на кнопки для управления:", keyboard)
     
     async def handle_alert_input(self, chat_id, text):
         try:
@@ -957,6 +961,9 @@ class CurrencyMonitor:
             elif data.startswith("tz_"):
                 tz_key = data.replace("tz_", "")
                 await self.set_user_timezone(chat_id, tz_key)
+            elif data == "noop":
+                # Пустая кнопка, ничего не делаем
+                pass
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
@@ -1224,8 +1231,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"📌 Закрепление нескольких пар")
-        logger.info(f"🗑️ Кнопки управления справа")
+        logger.info(f"🔘 Трехколоночное меню: значки как кнопки")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
