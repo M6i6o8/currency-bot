@@ -596,7 +596,7 @@ class CurrencyMonitor:
             
             await self.send_telegram_message_with_keyboard(
                 chat_id,
-                f"📊 <b>Управление алертами: {pair}</b>\n\n"
+                f"📊 {pair}\n\n"
                 f"Всего алертов: {len(active_alerts)}\n\n"
                 f"{alerts_text}",
                 keyboard
@@ -604,15 +604,6 @@ class CurrencyMonitor:
         else:
             # Нет алертов - запускаем создание
             self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
-            hints = {
-                'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
-                'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
-                'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
-                'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
-                'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
-            }
-            hint = hints.get(pair, '1.0')
             
             cancel_keyboard = {
                 "inline_keyboard": [
@@ -622,9 +613,8 @@ class CurrencyMonitor:
             
             await self.send_telegram_message_with_keyboard(
                 chat_id,
-                f"💰 <b>Создать алерт для {pair}</b>\n\n"
-                f"📝 Введи целевую цену:\n"
-                f"Например: {hint}",
+                f"Создать алерт для {pair}\n\n"
+                f"📝 Введи целевую цену:",
                 cancel_keyboard
             )
     
@@ -633,7 +623,7 @@ class CurrencyMonitor:
         pass
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с индикацией активных алертов"""
+        """Главное меню с индикацией активных алертов и кнопками удаления"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -649,33 +639,45 @@ class CurrencyMonitor:
         keyboard = {"inline_keyboard": []}
         user_alerts_list = user_alerts.get(str(chat_id), [])
         
+        # Функция для получения индикатора количества алертов
+        def get_alert_indicator(count):
+            if count == 0:
+                return ""
+            elif count == 1:
+                return " 1️⃣"
+            elif count == 2:
+                return " 2️⃣"
+            elif count == 3:
+                return " 3️⃣"
+            elif count == 4:
+                return " 4️⃣"
+            elif count == 5:
+                return " 5️⃣"
+            else:
+                return f" {count}️⃣"
+        
         # Валюты с индикацией
         currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']
         for pair in currency_pairs:
             if pair in rates:
                 rate = rates[pair]
-                # Считаем количество активных алертов для этой пары
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
                 
-                if alert_count > 0:
-                    if alert_count == 1:
-                        indicator = " 1️⃣"
-                    elif alert_count == 2:
-                        indicator = " 2️⃣"
-                    elif alert_count == 3:
-                        indicator = " 3️⃣"
-                    elif alert_count == 4:
-                        indicator = " 4️⃣"
-                    elif alert_count == 5:
-                        indicator = " 5️⃣"
-                    else:
-                        indicator = f" {alert_count}️⃣"
-                else:
-                    indicator = ""
-                
+                indicator = get_alert_indicator(alert_count)
                 text = f"💶 {pair}: {rate:.4f}{indicator}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
+                
+                if alert_count > 0:
+                    # Если есть алерты, добавляем кнопку удаления в той же строке
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"},
+                        {"text": "🗑️", "callback_data": f"delete_all_{pair}"}
+                    ])
+                else:
+                    # Если нет алертов, только кнопка управления
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"}
+                    ])
         
         # Металлы
         metals = ['XAU/USD', 'XAG/USD']
@@ -685,24 +687,18 @@ class CurrencyMonitor:
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
                 
-                if alert_count > 0:
-                    if alert_count == 1:
-                        indicator = " 1️⃣"
-                    elif alert_count == 2:
-                        indicator = " 2️⃣"
-                    elif alert_count == 3:
-                        indicator = " 3️⃣"
-                    elif alert_count == 4:
-                        indicator = " 4️⃣"
-                    elif alert_count == 5:
-                        indicator = " 5️⃣"
-                    else:
-                        indicator = f" {alert_count}️⃣"
-                else:
-                    indicator = ""
-                
+                indicator = get_alert_indicator(alert_count)
                 text = f"🏅 {pair}: ${rate:,.2f}{indicator}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
+                
+                if alert_count > 0:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"},
+                        {"text": "🗑️", "callback_data": f"delete_all_{pair}"}
+                    ])
+                else:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"}
+                    ])
         
         # Крипта
         crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'LINK/USD', 'TON/USD', 'XRP/USD', 'DOGE/USD', 'AVAX/USD']
@@ -712,21 +708,7 @@ class CurrencyMonitor:
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
                 
-                if alert_count > 0:
-                    if alert_count == 1:
-                        indicator = " 1️⃣"
-                    elif alert_count == 2:
-                        indicator = " 2️⃣"
-                    elif alert_count == 3:
-                        indicator = " 3️⃣"
-                    elif alert_count == 4:
-                        indicator = " 4️⃣"
-                    elif alert_count == 5:
-                        indicator = " 5️⃣"
-                    else:
-                        indicator = f" {alert_count}️⃣"
-                else:
-                    indicator = ""
+                indicator = get_alert_indicator(alert_count)
                 
                 if pair in ['BTC/USD', 'ETH/USD']:
                     text = f"₿ {pair}: ${rate:,.2f}{indicator}"
@@ -736,7 +718,16 @@ class CurrencyMonitor:
                     text = f"⚡️ {pair}: ${rate:.4f}{indicator}"
                 else:
                     text = f"🪙 {pair}: ${rate:.2f}{indicator}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
+                
+                if alert_count > 0:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"},
+                        {"text": "🗑️", "callback_data": f"delete_all_{pair}"}
+                    ])
+                else:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"}
+                    ])
         
         # Индексы
         indices = ['S&P 500', 'NASDAQ']
@@ -746,24 +737,18 @@ class CurrencyMonitor:
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
                 
-                if alert_count > 0:
-                    if alert_count == 1:
-                        indicator = " 1️⃣"
-                    elif alert_count == 2:
-                        indicator = " 2️⃣"
-                    elif alert_count == 3:
-                        indicator = " 3️⃣"
-                    elif alert_count == 4:
-                        indicator = " 4️⃣"
-                    elif alert_count == 5:
-                        indicator = " 5️⃣"
-                    else:
-                        indicator = f" {alert_count}️⃣"
-                else:
-                    indicator = ""
-                
+                indicator = get_alert_indicator(alert_count)
                 text = f"📈 {pair}: ${rate:,.2f}{indicator}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
+                
+                if alert_count > 0:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"},
+                        {"text": "🗑️", "callback_data": f"delete_all_{pair}"}
+                    ])
+                else:
+                    keyboard["inline_keyboard"].append([
+                        {"text": text, "callback_data": f"manage_{pair}"}
+                    ])
         
         # Товары
         if 'CORN/USD' in rates:
@@ -771,24 +756,18 @@ class CurrencyMonitor:
             alert_count = sum(1 for alert in user_alerts_list 
                               if alert.get('pair') == 'CORN/USD' and alert.get('active'))
             
-            if alert_count > 0:
-                if alert_count == 1:
-                    indicator = " 1️⃣"
-                elif alert_count == 2:
-                    indicator = " 2️⃣"
-                elif alert_count == 3:
-                    indicator = " 3️⃣"
-                elif alert_count == 4:
-                    indicator = " 4️⃣"
-                elif alert_count == 5:
-                    indicator = " 5️⃣"
-                else:
-                    indicator = f" {alert_count}️⃣"
-            else:
-                indicator = ""
-            
+            indicator = get_alert_indicator(alert_count)
             text = f"🌽 CORN/USD: ${rate:.2f}{indicator}"
-            keyboard["inline_keyboard"].append([{"text": text, "callback_data": "manage_CORN/USD"}])
+            
+            if alert_count > 0:
+                keyboard["inline_keyboard"].append([
+                    {"text": text, "callback_data": "manage_CORN/USD"},
+                    {"text": "🗑️", "callback_data": "delete_all_CORN/USD"}
+                ])
+            else:
+                keyboard["inline_keyboard"].append([
+                    {"text": text, "callback_data": "manage_CORN/USD"}
+                ])
         
         # Кнопки внизу
         keyboard["inline_keyboard"].append([
@@ -980,12 +959,24 @@ class CurrencyMonitor:
                                                             a.get('target') == target_alert['target'] and 
                                                             a.get('active'))]
                             save_user_alerts(user_alerts)
-                            await self.send_telegram_message(chat_id, f"✅ Алерт {alert_num+1} для {pair} удален")
                 except Exception as e:
                     logger.error(f"Delete specific error: {e}")
                 
                 # Возвращаемся к управлению этой парой
                 await self.handle_pair_management(chat_id, pair)
+            elif data.startswith("delete_all_"):
+                pair = data.replace("delete_all_", "")
+                user_id = str(chat_id)
+                if user_id in user_alerts:
+                    # Удаляем все алерты для этой пары
+                    old_count = len([a for a in user_alerts[user_id] 
+                                     if a.get('pair') == pair and a.get('active')])
+                    user_alerts[user_id] = [a for a in user_alerts[user_id] 
+                                             if not (a.get('pair') == pair and a.get('active'))]
+                    save_user_alerts(user_alerts)
+                    logger.info(f"Удалено {old_count} алертов для {pair} у пользователя {user_id}")
+                # Обновляем главное меню
+                await self.show_main_menu(chat_id)
             elif data.startswith("add_"):
                 pair = data.replace("add_", "")
                 # Запускаем процесс добавления новой цели
@@ -997,8 +988,8 @@ class CurrencyMonitor:
                 }
                 await self.send_telegram_message_with_keyboard(
                     chat_id,
-                    f"💰 <b>Добавить цель для {pair}</b>\n\n"
-                    f"📝 Введи новую целевую цену:",
+                    f"Создать алерт для {pair}\n\n"
+                    f"📝 Введи целевую цену:",
                     cancel_keyboard
                 )
             elif data == "collaboration":
@@ -1187,7 +1178,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"🔢 Индикация количества алертов цифрами")
+        logger.info(f"🗑️ Кнопки массового удаления алертов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
