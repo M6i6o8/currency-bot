@@ -175,6 +175,7 @@ class CurrencyMonitor:
             # Индексы
             'S&P 500': 5100.0,
             'NASDAQ': 18000.0,
+            
             # Товары
             'CORN/USD': 4.50
         }
@@ -558,81 +559,149 @@ class CurrencyMonitor:
         await self.send_telegram_message(chat_id, msg)
         await self.show_main_menu(chat_id)
     
+    async def handle_pair_management(self, chat_id, pair):
+        """Показывает меню управления для конкретной пары"""
+        user_id = str(chat_id)
+        user_alerts_list = user_alerts.get(user_id, [])
+        
+        # Ищем активный алерт для этой пары
+        active_alert = None
+        for alert in user_alerts_list:
+            if alert.get('pair') == pair and alert.get('active'):
+                active_alert = alert
+                break
+        
+        if active_alert:
+            # Есть активный алерт - показываем меню управления
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "✏️ Изменить цель", "callback_data": f"edit_{pair}"}],
+                    [{"text": "❌ Удалить алерт", "callback_data": f"delete_confirm_{pair}"}],
+                    [{"text": "◀️ Назад", "callback_data": "main_menu"}]
+                ]
+            }
+            await self.send_telegram_message_with_keyboard(
+                chat_id,
+                f"📊 <b>Управление алертом: {pair}</b>\n\n"
+                f"🎯 Текущая цель: {active_alert['target']}\n"
+                f"✅ Статус: активен",
+                keyboard
+            )
+        else:
+            # Нет алерта - запускаем создание
+            self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
+            hints = {
+                'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
+                'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
+                'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
+                'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
+                'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
+                'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
+            }
+            hint = hints.get(pair, '1.0')
+            
+            cancel_keyboard = {
+                "inline_keyboard": [
+                    [{"text": "◀️ Отмена", "callback_data": "main_menu"}]
+                ]
+            }
+            
+            await self.send_telegram_message_with_keyboard(
+                chat_id,
+                f"💰 <b>Создать алерт для {pair}</b>\n\n"
+                f"📝 Введи целевую цену:\n"
+                f"Например: {hint}",
+                cancel_keyboard
+            )
+    
+    async def confirm_delete_alert(self, chat_id, pair):
+        """Подтверждение удаления алерта"""
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "✅ Да, удалить", "callback_data": f"do_delete_{pair}"}],
+                [{"text": "❌ Нет, оставить", "callback_data": f"manage_{pair}"}]
+            ]
+        }
+        await self.send_telegram_message_with_keyboard(
+            chat_id,
+            f"⚠️ Ты уверен, что хочешь удалить алерт для {pair}?",
+            keyboard
+        )
+    
     async def show_main_menu(self, chat_id):
-        """Главное меню с ценами на кнопках и кнопками внизу"""
+        """Главное меню с индикацией активных алертов"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
             keyboard = {
                 "inline_keyboard": [
-                    [{"text": "💰 Добавить алерт", "callback_data": "start_alert"}],
-                    [{"text": "📋 Мои алерты", "callback_data": "show_alerts"}],
-                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
-                    [{"text": "📩 Обратная связь", "callback_data": "collaboration"}]
+                    [{"text": "📩 Обратная связь", "callback_data": "collaboration"}],
+                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}]
                 ]
             }
             await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
             return
         
         keyboard = {"inline_keyboard": []}
+        user_alerts_list = user_alerts.get(str(chat_id), [])
+        active_pairs = {alert['pair'] for alert in user_alerts_list if alert.get('active')}
         
-        # Валюты
+        # Валюты с индикацией
         currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']
         for pair in currency_pairs:
             if pair in rates:
                 rate = rates[pair]
-                text = f"💶 {pair}: {rate:.4f}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+                indicator = " ✅" if pair in active_pairs else ""
+                text = f"💶 {pair}: {rate:.4f}{indicator}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
         
         # Металлы
         metals = ['XAU/USD', 'XAG/USD']
         for pair in metals:
             if pair in rates:
                 rate = rates[pair]
-                text = f"🏅 {pair}: ${rate:,.2f}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+                indicator = " ✅" if pair in active_pairs else ""
+                text = f"🏅 {pair}: ${rate:,.2f}{indicator}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
         
         # Крипта
         crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'LINK/USD', 'TON/USD', 'XRP/USD', 'DOGE/USD', 'AVAX/USD']
         for pair in crypto_pairs:
             if pair in rates:
                 rate = rates[pair]
+                indicator = " ✅" if pair in active_pairs else ""
                 if pair in ['BTC/USD', 'ETH/USD']:
-                    text = f"₿ {pair}: ${rate:,.2f}"
+                    text = f"₿ {pair}: ${rate:,.2f}{indicator}"
                 elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
-                    text = f"🟪 {pair}: ${rate:.2f}"
+                    text = f"🟪 {pair}: ${rate:.2f}{indicator}"
                 elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
-                    text = f"⚡️ {pair}: ${rate:.4f}"
+                    text = f"⚡️ {pair}: ${rate:.4f}{indicator}"
                 else:
-                    text = f"🪙 {pair}: ${rate:.2f}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+                    text = f"🪙 {pair}: ${rate:.2f}{indicator}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
         
         # Индексы
         indices = ['S&P 500', 'NASDAQ']
         for pair in indices:
             if pair in rates:
                 rate = rates[pair]
-                text = f"📈 {pair}: ${rate:,.2f}"
-                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"pair_{pair}"}])
+                indicator = " ✅" if pair in active_pairs else ""
+                text = f"📈 {pair}: ${rate:,.2f}{indicator}"
+                keyboard["inline_keyboard"].append([{"text": text, "callback_data": f"manage_{pair}"}])
         
         # Товары
         if 'CORN/USD' in rates:
-            text = f"🌽 CORN/USD: ${rates['CORN/USD']:.2f}"
-            keyboard["inline_keyboard"].append([{"text": text, "callback_data": "pair_CORN/USD"}])
+            indicator = " ✅" if 'CORN/USD' in active_pairs else ""
+            text = f"🌽 CORN/USD: ${rates['CORN/USD']:.2f}{indicator}"
+            keyboard["inline_keyboard"].append([{"text": text, "callback_data": "manage_CORN/USD"}])
         
-        # Кнопки внизу
+        # Кнопки внизу (убрали "Мои алерты")
         keyboard["inline_keyboard"].append([
-            {"text": "📋 Мои алерты", "callback_data": "show_alerts"},
-            {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"},
-            {"text": "📩 Обратная связь", "callback_data": "collaboration"}
+            {"text": "📩 Обратная связь", "callback_data": "collaboration"},
+            {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
         ])
         
-        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для создания алерта:", keyboard)
-    
-    async def start_alert_creation(self, chat_id):
-        """Резервный метод для добавления алерта (если нужно)"""
-        self.alert_states[str(chat_id)] = {'step': 'pair'}
-        await self.show_main_menu(chat_id)
+        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для управления:", keyboard)
     
     async def handle_alert_input(self, chat_id, text):
         try:
@@ -651,10 +720,16 @@ class CurrencyMonitor:
                 return
                 
             pair = state['pair']
+            edit_mode = state.get('edit_mode', False)
             
             user_id = str(chat_id)
             if user_id not in user_alerts:
                 user_alerts[user_id] = []
+            
+            if edit_mode:
+                # Режим редактирования - удаляем старый и создаем новый
+                user_alerts[user_id] = [a for a in user_alerts[user_id] 
+                                         if not (a.get('pair') == pair and a.get('active'))]
             
             alert = {
                 'pair': pair,
@@ -676,8 +751,7 @@ class CurrencyMonitor:
             # Подтверждение создания алерта
             await self.send_telegram_message(
                 chat_id,
-                f"✅ Алерт создан!\n\n"
-                f"📊 {pair}\n"
+                f"✅ Алерт для {pair} создан!\n\n"
                 f"🎯 Цель: {target}"
             )
             
@@ -698,7 +772,7 @@ class CurrencyMonitor:
         
         if not alerts:
             await self.send_telegram_message(chat_id, "📭 У тебя пока нет алертов")
-            return  # Убрали show_main_menu отсюда!
+            return
         
         keyboard = {"inline_keyboard": []}
         msg = "📋 Твои алерты:\n\n"
@@ -754,9 +828,7 @@ class CurrencyMonitor:
                 return
             
             if text == '/alert':
-                await self.start_alert_creation(chat_id)
-            elif text == '/myalerts':
-                await self.list_alerts(chat_id)
+                await self.handle_pair_management(chat_id, 'EUR/USD')  # Заглушка, но лучше убрать эту команду
             else:
                 await self.show_main_menu(chat_id)
                 
@@ -793,11 +865,36 @@ class CurrencyMonitor:
             elif data.startswith("tz_"):
                 tz_key = data.replace("tz_", "")
                 await self.set_user_timezone(chat_id, tz_key)
-                # show_main_menu уже внутри set_user_timezone
-            elif data == "start_alert":
-                await self.start_alert_creation(chat_id)
-            elif data == "show_alerts":
-                await self.list_alerts(chat_id)
+            elif data.startswith("manage_"):
+                pair = data.replace("manage_", "")
+                await self.handle_pair_management(chat_id, pair)
+            elif data.startswith("delete_confirm_"):
+                pair = data.replace("delete_confirm_", "")
+                await self.confirm_delete_alert(chat_id, pair)
+            elif data.startswith("do_delete_"):
+                pair = data.replace("do_delete_", "")
+                user_id = str(chat_id)
+                if user_id in user_alerts:
+                    # Удаляем алерт для этой пары
+                    user_alerts[user_id] = [a for a in user_alerts[user_id] 
+                                             if not (a.get('pair') == pair and a.get('active'))]
+                    save_user_alerts(user_alerts)
+                    await self.send_telegram_message(chat_id, f"✅ Алерт для {pair} удален")
+                await self.show_main_menu(chat_id)
+            elif data.startswith("edit_"):
+                pair = data.replace("edit_", "")
+                # Запускаем процесс изменения цели
+                self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price', 'edit_mode': True}
+                cancel_keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "◀️ Отмена", "callback_data": f"manage_{pair}"}]
+                    ]
+                }
+                await self.send_telegram_message_with_keyboard(
+                    chat_id,
+                    f"✏️ Введи новую цель для {pair}:",
+                    cancel_keyboard
+                )
             elif data == "collaboration":
                 collab_text = (
                     "📩 <b>Обратная связь</b>\n\n"
@@ -806,44 +903,13 @@ class CurrencyMonitor:
                     "✉️ Пишите: @Maranafa2023"
                 )
                 await self.send_telegram_message(chat_id, collab_text)
-                # НЕТ show_main_menu здесь!
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.send_telegram_message(chat_id, "❌ Создание отменено")
                 await self.show_main_menu(chat_id)
-            elif data.startswith("pair_") and data != "pair_noop" and data != "noop":
-                pair = data.replace("pair_", "")
-                if str(chat_id) in self.alert_states:
-                    # Если уже есть состояние - обновляем пару
-                    self.alert_states[str(chat_id)]['pair'] = pair
-                else:
-                    # Если нет состояния - создаем новое
-                    self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
-                
-                hints = {
-                    'EUR/USD': '1.10', 'GBP/USD': '1.30', 'USD/JPY': '150',
-                    'EUR/GBP': '0.87', 'XAU/USD': '5160', 'XAG/USD': '30',
-                    'BTC/USD': '67000', 'ETH/USD': '1950', 'SOL/USD': '84',
-                    'BNB/USD': '610', 'LINK/USD': '8.6', 'TON/USD': '1.35',
-                    'XRP/USD': '1.40', 'DOGE/USD': '0.098', 'AVAX/USD': '9.1',
-                    'S&P 500': '5100', 'NASDAQ': '18000', 'CORN/USD': '4.50'
-                }
-                hint = hints.get(pair, '1.0')
-                
-                # Кнопка отмены при вводе цены
-                cancel_keyboard = {
-                    "inline_keyboard": [
-                        [{"text": "◀️ Отмена", "callback_data": "cancel_alert"}]
-                    ]
-                }
-                
-                await self.send_telegram_message_with_keyboard(
-                    chat_id,
-                    f"💰 Пара: {pair}\n\n📝 Введи целевую цену:\nНапример: {hint}",
-                    cancel_keyboard
-                )
             elif data.startswith("delete_"):
+                # Старый формат удаления - для обратной совместимости
                 try:
                     num = int(data.replace("delete_", "")) - 1
                     user_id = str(chat_id)
@@ -851,7 +917,6 @@ class CurrencyMonitor:
                         user_alerts[user_id].pop(num)
                         save_user_alerts(user_alerts)
                         await self.send_telegram_message(chat_id, f"✅ Алерт {num+1} удален")
-                        # После удаления показываем обновленный список
                         await self.list_alerts(chat_id)
                 except Exception as e:
                     logger.error(f"Delete error: {e}")
@@ -1016,7 +1081,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"🔄 Автоматическое возвращение в главное меню после всех действий, кроме: пустой список алертов и обратная связь")
+        logger.info(f"🔄 Динамическая панель управления алертами")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
