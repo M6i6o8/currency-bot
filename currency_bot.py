@@ -603,7 +603,7 @@ class CurrencyMonitor:
             await self.show_main_menu(chat_id)
     
     async def show_pin_menu(self, chat_id):
-        """Показывает меню для управления закреплёнными парами"""
+        """Показывает меню для управления закреплёнными парами (клик = закрепить/открепить)"""
         rates = await self.fetch_rates()
         if not rates:
             await self.send_telegram_message(chat_id, "❌ Не удалось получить список пар")
@@ -612,14 +612,6 @@ class CurrencyMonitor:
         
         user_id = str(chat_id)
         pinned_pairs = get_user_pinned_pairs(user_id)
-        
-        # Формируем сообщение
-        if pinned_pairs:
-            pinned_text = "Текущие закреплённые:\n"
-            for pair in pinned_pairs:
-                pinned_text += f"📍 {pair}\n"
-        else:
-            pinned_text = "У тебя пока нет закреплённых пар."
         
         # Создаем клавиатуру
         keyboard = {"inline_keyboard": []}
@@ -647,22 +639,23 @@ class CurrencyMonitor:
             else:
                 emoji = "🪙"
             
-            # Если пара уже закреплена, добавляем галочку
-            check = " ✅" if pair in pinned_pairs else ""
-            text = f"{emoji} {pair}{check}"
+            # Если пара уже закреплена, добавляем 📌
+            pin_mark = " 📌" if pair in pinned_pairs else ""
+            text = f"{emoji} {pair}{pin_mark}"
+            
+            # При клике на пару сразу закрепляем/открепляем
             keyboard["inline_keyboard"].append([
                 {"text": text, "callback_data": f"pin_toggle_{pair}"}
             ])
         
-        # Кнопки внизу
+        # Кнопка "Назад"
         keyboard["inline_keyboard"].append([
-            {"text": "✅ Готово", "callback_data": "main_menu"},
             {"text": "◀️ Назад", "callback_data": "main_menu"}
         ])
         
         await self.send_telegram_message_with_keyboard(
             chat_id,
-            f"📌 <b>Управление закреплёнными парами</b>\n\n{pinned_text}\n\nВыбери пару, чтобы закрепить/открепить:",
+            f"📌 <b>Закрепление пар</b>\n\n👇 Нажми на пару, чтобы закрепить/открепить:",
             keyboard
         )
     
@@ -1109,7 +1102,7 @@ class CurrencyMonitor:
                 if pair in pinned_pairs:
                     # Открепляем
                     pinned_pairs = [p for p in pinned_pairs if p != pair]
-                    await self.send_telegram_message(chat_id, f"📍 {pair} откреплена")
+                    await self.send_telegram_message(chat_id, f"📌 {pair} откреплена")
                 else:
                     # Закрепляем
                     pinned_pairs.append(pair)
@@ -1385,7 +1378,7 @@ class CurrencyMonitor:
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
-        logger.info(f"📌 Поддержка закрепления пар")
+        logger.info(f"📌 Поддержка закрепления пар (клик = 📌)")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
