@@ -601,21 +601,8 @@ class CurrencyMonitor:
                 keyboard
             )
         else:
-            # Нет алертов - запускаем создание
-            self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
-            
-            cancel_keyboard = {
-                "inline_keyboard": [
-                    [{"text": "◀️ Отмена", "callback_data": "main_menu"}]
-                ]
-            }
-            
-            await self.send_telegram_message_with_keyboard(
-                chat_id,
-                f"Создать алерт для {pair}\n\n"
-                f"📝 Введи целевую цену:",
-                cancel_keyboard
-            )
+            # Нет алертов - просто показываем главное меню (не предлагаем создать)
+            await self.show_main_menu(chat_id)
     
     async def show_main_menu(self, chat_id):
         """Главное меню с одной колонкой"""
@@ -935,6 +922,7 @@ class CurrencyMonitor:
                                                             a.get('target') == target_alert['target'] and 
                                                             a.get('active'))]
                             save_user_alerts(user_alerts)
+                            await self.send_telegram_message(chat_id, f"✅ Алерт {alert_num+1} удален")
                 except Exception as e:
                     logger.error(f"Delete specific error: {e}")
                 
@@ -950,8 +938,8 @@ class CurrencyMonitor:
                     user_alerts[user_id] = [a for a in user_alerts[user_id] 
                                              if not (a.get('pair') == pair and a.get('active'))]
                     save_user_alerts(user_alerts)
-                    logger.info(f"Удалено {old_count} алертов для {pair} у пользователя {user_id}")
-                # Обновляем главное меню
+                    await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
+                # Возвращаемся в главное меню
                 await self.show_main_menu(chat_id)
             elif data.startswith("add_"):
                 pair = data.replace("add_", "")
