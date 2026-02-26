@@ -768,7 +768,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню со слоганом и тремя кнопками внизу"""
+        """Главное меню со слоганом и тремя кнопками внизу (закрепленные пары внизу)"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -898,8 +898,8 @@ class CurrencyMonitor:
         pinned_items.sort(key=lambda x: x['pair'])
         regular_items.sort(key=lambda x: x['pair'])
         
-        # Объединяем: сначала закрепленные, потом остальные
-        sorted_pairs = pinned_items + regular_items
+        # Объединяем: сначала обычные, потом закрепленные (то есть закрепленные ВНИЗУ)
+        sorted_pairs = regular_items + pinned_items
         
         # Формируем одноколоночную клавиатуру
         keyboard = {"inline_keyboard": []}
@@ -1102,16 +1102,14 @@ class CurrencyMonitor:
                 if pair in pinned_pairs:
                     # Открепляем
                     pinned_pairs = [p for p in pinned_pairs if p != pair]
-                    await self.send_telegram_message(chat_id, f"📌 {pair} откреплена")
                 else:
                     # Закрепляем
                     pinned_pairs.append(pair)
-                    await self.send_telegram_message(chat_id, f"📌 {pair} закреплена")
                 
                 # Обновляем статистику
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
-                # Возвращаемся в меню закрепления
+                # Возвращаемся в меню закрепления (без уведомлений)
                 await self.show_pin_menu(chat_id)
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
@@ -1378,7 +1376,7 @@ class CurrencyMonitor:
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
-        logger.info(f"📌 Поддержка закрепления пар (клик = 📌)")
+        logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
