@@ -618,7 +618,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с индикацией активных алертов"""
+        """Главное меню с одной колонкой"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -653,7 +653,7 @@ class CurrencyMonitor:
                 return f" {count}️⃣"
         
         # Собираем все доступные пары с их данными
-        all_pairs_data = []
+        all_pairs = []
         
         # Валюты
         currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']
@@ -664,10 +664,9 @@ class CurrencyMonitor:
                                   if alert.get('pair') == pair and alert.get('active'))
                 indicator = get_alert_indicator(alert_count)
                 text = f"💶 {pair}: {rate:.4f}{indicator}"
-                all_pairs_data.append({
+                all_pairs.append({
                     'pair': pair,
-                    'text': text,
-                    'alert_count': alert_count
+                    'text': text
                 })
         
         # Металлы
@@ -679,10 +678,9 @@ class CurrencyMonitor:
                                   if alert.get('pair') == pair and alert.get('active'))
                 indicator = get_alert_indicator(alert_count)
                 text = f"🏅 {pair}: ${rate:,.2f}{indicator}"
-                all_pairs_data.append({
+                all_pairs.append({
                     'pair': pair,
-                    'text': text,
-                    'alert_count': alert_count
+                    'text': text
                 })
         
         # Крипта
@@ -703,10 +701,9 @@ class CurrencyMonitor:
                 else:
                     text = f"🪙 {pair}: ${rate:.2f}{indicator}"
                 
-                all_pairs_data.append({
+                all_pairs.append({
                     'pair': pair,
-                    'text': text,
-                    'alert_count': alert_count
+                    'text': text
                 })
         
         # Индексы
@@ -718,10 +715,9 @@ class CurrencyMonitor:
                                   if alert.get('pair') == pair and alert.get('active'))
                 indicator = get_alert_indicator(alert_count)
                 text = f"📈 {pair}: ${rate:,.2f}{indicator}"
-                all_pairs_data.append({
+                all_pairs.append({
                     'pair': pair,
-                    'text': text,
-                    'alert_count': alert_count
+                    'text': text
                 })
         
         # Товары
@@ -731,36 +727,23 @@ class CurrencyMonitor:
                               if alert.get('pair') == 'CORN/USD' and alert.get('active'))
             indicator = get_alert_indicator(alert_count)
             text = f"🌽 CORN/USD: ${rate:.2f}{indicator}"
-            all_pairs_data.append({
+            all_pairs.append({
                 'pair': 'CORN/USD',
-                'text': text,
-                'alert_count': alert_count
+                'text': text
             })
         
         # Сортируем все пары по алфавиту
-        all_pairs_data.sort(key=lambda x: x['pair'])
+        all_pairs.sort(key=lambda x: x['pair'])
         
-        # Формируем двухколоночную клавиатуру
+        # Формируем одноколоночную клавиатуру
         keyboard = {"inline_keyboard": []}
         
-        # Проходим по парам парами для компактного отображения
-        for i in range(0, len(all_pairs_data), 2):
-            row = []
-            
-            # Первая колонка
-            item1 = all_pairs_data[i]
-            text1 = item1['text']
-            pair1 = item1['pair']
-            row.append({"text": text1, "callback_data": f"manage_{pair1}"})
-            
-            # Вторая колонка (если есть)
-            if i + 1 < len(all_pairs_data):
-                item2 = all_pairs_data[i + 1]
-                text2 = item2['text']
-                pair2 = item2['pair']
-                row.append({"text": text2, "callback_data": f"manage_{pair2}"})
-            
-            keyboard["inline_keyboard"].append(row)
+        for item in all_pairs:
+            pair = item['pair']
+            text = item['text']
+            keyboard["inline_keyboard"].append([
+                {"text": text, "callback_data": f"manage_{pair}"}
+            ])
         
         # Кнопки внизу
         keyboard["inline_keyboard"].append([
