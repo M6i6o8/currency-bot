@@ -576,10 +576,10 @@ class CurrencyMonitor:
             # Создаем клавиатуру с кнопками для каждого алерта
             keyboard = {"inline_keyboard": []}
             
-            # Добавляем кнопку для каждого алерта
+            # Добавляем кнопку для каждого алерта (только цена)
             for i, alert in enumerate(active_alerts, 1):
                 keyboard["inline_keyboard"].append([
-                    {"text": f"❌ Удалить алерт {i} ({alert['target']})", 
+                    {"text": f"❌ {alert['target']}", 
                      "callback_data": f"delete_specific_{pair}_{i}"}
                 ])
             
@@ -618,7 +618,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с одной колонкой"""
+        """Главное меню с одной колонкой (без заголовка)"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -628,7 +628,7 @@ class CurrencyMonitor:
                     [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}]
                 ]
             }
-            await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
+            await self.send_telegram_message_with_keyboard(chat_id, "", keyboard)
             return
         
         # Получаем алерты пользователя
@@ -751,7 +751,8 @@ class CurrencyMonitor:
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
         ])
         
-        await self.send_telegram_message_with_keyboard(chat_id, "📊 Нажми на пару для управления:", keyboard)
+        # Отправляем пустое сообщение с клавиатурой
+        await self.send_telegram_message_with_keyboard(chat_id, "", keyboard)
     
     async def handle_alert_input(self, chat_id, text):
         try:
