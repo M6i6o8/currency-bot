@@ -105,7 +105,7 @@ def save_user_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
-def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None, slogan=None, slogan_time=None):
+def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None, slogan=None, slogan_time=None, pinned_pairs=None):
     """Обновляет статистику пользователя"""
     stats = load_user_stats()
     user_id = str(chat_id)
@@ -123,7 +123,8 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
             'timezone': 'Europe/Moscow',
             'timezone_name': 'Москва (UTC+3)',
             'current_slogan': random.choice(SLOGANS),
-            'slogan_updated': datetime.now().isoformat()
+            'slogan_updated': datetime.now().isoformat(),
+            'pinned_pairs': []
         }
     
     stats[user_id]['last_seen'] = datetime.now().isoformat()
@@ -143,6 +144,9 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
     
     if slogan_time:
         stats[user_id]['slogan_updated'] = slogan_time.isoformat()
+    
+    if pinned_pairs is not None:
+        stats[user_id]['pinned_pairs'] = pinned_pairs
     
     save_user_stats(stats)
     return stats[user_id]
@@ -194,6 +198,14 @@ def get_user_slogan(user_id):
         update_user_stats(int(user_id), '', '', '', slogan=new_slogan, slogan_time=now)
     
     return new_slogan
+
+def get_user_pinned_pairs(user_id):
+    """Возвращает закрепленные пары пользователя"""
+    stats = load_user_stats()
+    user_id = str(user_id)
+    if user_id in stats and 'pinned_pairs' in stats[user_id]:
+        return stats[user_id]['pinned_pairs']
+    return []
 
 # Глобальные переменные
 user_alerts = load_user_alerts()
@@ -590,6 +602,70 @@ class CurrencyMonitor:
             await self.send_telegram_message(chat_id, "❌ Ошибка: часовой пояс не найден")
             await self.show_main_menu(chat_id)
     
+    async def show_pin_menu(self, chat_id):
+        """Показывает меню для управления закреплёнными парами"""
+        rates = await self.fetch_rates()
+        if not rates:
+            await self.send_telegram_message(chat_id, "❌ Не удалось получить список пар")
+            await self.show_main_menu(chat_id)
+            return
+        
+        user_id = str(chat_id)
+        pinned_pairs = get_user_pinned_pairs(user_id)
+        
+        # Формируем сообщение
+        if pinned_pairs:
+            pinned_text = "Текущие закреплённые:\n"
+            for pair in pinned_pairs:
+                pinned_text += f"📍 {pair}\n"
+        else:
+            pinned_text = "У тебя пока нет закреплённых пар."
+        
+        # Создаем клавиатуру
+        keyboard = {"inline_keyboard": []}
+        
+        # Добавляем все пары по одной на строку
+        all_pairs = sorted(rates.keys())
+        for pair in all_pairs:
+            # Определяем эмодзи для пары
+            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']:
+                emoji = "💶"
+            elif pair in ['XAU/USD', 'XAG/USD']:
+                emoji = "🏅"
+            elif pair in ['BTC/USD', 'ETH/USD']:
+                emoji = "₿"
+            elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
+                emoji = "🟪"
+            elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
+                emoji = "⚡️"
+            elif pair == 'S&P 500':
+                emoji = "📈"
+            elif pair == 'NASDAQ':
+                emoji = "📊"
+            elif pair == 'CORN/USD':
+                emoji = "🌽"
+            else:
+                emoji = "🪙"
+            
+            # Если пара уже закреплена, добавляем галочку
+            check = " ✅" if pair in pinned_pairs else ""
+            text = f"{emoji} {pair}{check}"
+            keyboard["inline_keyboard"].append([
+                {"text": text, "callback_data": f"pin_toggle_{pair}"}
+            ])
+        
+        # Кнопки внизу
+        keyboard["inline_keyboard"].append([
+            {"text": "✅ Готово", "callback_data": "main_menu"},
+            {"text": "◀️ Назад", "callback_data": "main_menu"}
+        ])
+        
+        await self.send_telegram_message_with_keyboard(
+            chat_id,
+            f"📌 <b>Управление закреплёнными парами</b>\n\n{pinned_text}\n\nВыбери пару, чтобы закрепить/открепить:",
+            keyboard
+        )
+    
     async def show_stats(self, chat_id):
         """Показывает статистику использования бота (только для админа)"""
         if not self.is_admin(chat_id):
@@ -623,7 +699,8 @@ class CurrencyMonitor:
             if data.get('username'):
                 name += f" (@{data['username']})"
             slogan = data.get('current_slogan', '—')
-            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n   📢 {slogan}\n"
+            pinned_count = len(data.get('pinned_pairs', []))
+            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n   📢 {slogan} | 📌 {pinned_count}\n"
         
         msg += "\n📈 <b>Популярные пары:</b>\n"
         all_pairs = []
@@ -698,23 +775,25 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню со слоганом, обновляемым раз в 24 часа"""
+        """Главное меню со слоганом и тремя кнопками внизу"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
             keyboard = {
                 "inline_keyboard": [
                     [{"text": "📩 Обратная связь", "callback_data": "collaboration"}],
-                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}]
+                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
+                    [{"text": "📌 Закрепить", "callback_data": "show_pin_menu"}]
                 ]
             }
             slogan = get_user_slogan(chat_id)
             await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
             return
         
-        # Получаем алерты пользователя
+        # Получаем алерты пользователя и закрепленные пары
         user_id = str(chat_id)
         user_alerts_list = user_alerts.get(user_id, [])
+        pinned_pairs = get_user_pinned_pairs(user_id)
         
         # Функция для получения индикатора количества алертов
         def get_alert_indicator(count):
@@ -747,7 +826,8 @@ class CurrencyMonitor:
                 text = f"💶 {pair}: {rate:.4f}{indicator}"
                 all_pairs.append({
                     'pair': pair,
-                    'text': text
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
                 })
         
         # Металлы
@@ -761,7 +841,8 @@ class CurrencyMonitor:
                 text = f"🏅 {pair}: ${rate:,.2f}{indicator}"
                 all_pairs.append({
                     'pair': pair,
-                    'text': text
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
                 })
         
         # Крипта
@@ -784,7 +865,8 @@ class CurrencyMonitor:
                 
                 all_pairs.append({
                     'pair': pair,
-                    'text': text
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
                 })
         
         # Индексы
@@ -798,7 +880,8 @@ class CurrencyMonitor:
                 text = f"📈 {pair}: ${rate:,.2f}{indicator}"
                 all_pairs.append({
                     'pair': pair,
-                    'text': text
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
                 })
         
         # Товары
@@ -810,26 +893,36 @@ class CurrencyMonitor:
             text = f"🌽 CORN/USD: ${rate:.2f}{indicator}"
             all_pairs.append({
                 'pair': 'CORN/USD',
-                'text': text
+                'text': text,
+                'is_pinned': pair in pinned_pairs
             })
         
-        # Сортируем все пары по алфавиту
-        all_pairs.sort(key=lambda x: x['pair'])
+        # Разделяем на закрепленные и обычные
+        pinned_items = [p for p in all_pairs if p['is_pinned']]
+        regular_items = [p for p in all_pairs if not p['is_pinned']]
+        
+        # Сортируем каждый список по алфавиту
+        pinned_items.sort(key=lambda x: x['pair'])
+        regular_items.sort(key=lambda x: x['pair'])
+        
+        # Объединяем: сначала закрепленные, потом остальные
+        sorted_pairs = pinned_items + regular_items
         
         # Формируем одноколоночную клавиатуру
         keyboard = {"inline_keyboard": []}
         
-        for item in all_pairs:
+        for item in sorted_pairs:
             pair = item['pair']
             text = item['text']
             keyboard["inline_keyboard"].append([
                 {"text": text, "callback_data": f"manage_{pair}"}
             ])
         
-        # Кнопки внизу
+        # Три кнопки внизу
         keyboard["inline_keyboard"].append([
             {"text": "📩 Обратная связь", "callback_data": "collaboration"},
-            {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
+            {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"},
+            {"text": "📌 Закрепить", "callback_data": "show_pin_menu"}
         ])
         
         # Получаем слоган для пользователя (обновляется раз в 24 часа)
@@ -957,6 +1050,10 @@ class CurrencyMonitor:
                 await self.show_timezone_menu(chat_id)
                 return
             
+            if text == '/pin':
+                await self.show_pin_menu(chat_id)
+                return
+            
             if str(chat_id) in self.alert_states:
                 await self.handle_alert_input(chat_id, text)
                 return
@@ -994,9 +1091,35 @@ class CurrencyMonitor:
                 await self.show_main_menu(chat_id)
             elif data == "show_timezone":
                 await self.show_timezone_menu(chat_id)
+            elif data == "show_pin_menu":
+                await self.show_pin_menu(chat_id)
             elif data.startswith("tz_"):
                 tz_key = data.replace("tz_", "")
                 await self.set_user_timezone(chat_id, tz_key)
+            elif data.startswith("pin_toggle_"):
+                pair = data.replace("pin_toggle_", "")
+                user_id = str(chat_id)
+                stats = load_user_stats()
+                
+                if user_id not in stats:
+                    stats[user_id] = {'pinned_pairs': []}
+                
+                pinned_pairs = stats[user_id].get('pinned_pairs', [])
+                
+                if pair in pinned_pairs:
+                    # Открепляем
+                    pinned_pairs = [p for p in pinned_pairs if p != pair]
+                    await self.send_telegram_message(chat_id, f"📍 {pair} откреплена")
+                else:
+                    # Закрепляем
+                    pinned_pairs.append(pair)
+                    await self.send_telegram_message(chat_id, f"📌 {pair} закреплена")
+                
+                # Обновляем статистику
+                update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
+                
+                # Возвращаемся в меню закрепления
+                await self.show_pin_menu(chat_id)
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
@@ -1076,7 +1199,13 @@ class CurrencyMonitor:
                     "✉️ Напиши @Maranafa2023 — добавим!\n\n"
                     "Спасибо, что пользуетесь ботом! 🚀"
                 )
-                await self.send_telegram_message(chat_id, collab_text)
+                # Добавляем кнопку "Назад"
+                back_keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "◀️ Назад", "callback_data": "main_menu"}]
+                    ]
+                }
+                await self.send_telegram_message_with_keyboard(chat_id, collab_text, back_keyboard)
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
@@ -1256,6 +1385,7 @@ class CurrencyMonitor:
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
+        logger.info(f"📌 Поддержка закрепления пар")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
