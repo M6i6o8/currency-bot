@@ -73,10 +73,6 @@ SLOGANS = [
     "🎉 Выходные близко",
 ]
 
-def get_random_slogan():
-    """Возвращает случайный слоган из списка"""
-    return random.choice(SLOGANS)
-
 def load_user_alerts():
     """Загружает алерты"""
     if os.path.exists(USER_ALERTS_FILE):
@@ -109,7 +105,7 @@ def save_user_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
-def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None):
+def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None, slogan=None, slogan_time=None):
     """Обновляет статистику пользователя"""
     stats = load_user_stats()
     user_id = str(chat_id)
@@ -124,8 +120,10 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
             'alerts_created': 0,
             'alerts_triggered': 0,
             'pairs': [],
-            'timezone': 'Europe/Moscow',  # По умолчанию Москва
-            'timezone_name': 'Москва (UTC+3)'
+            'timezone': 'Europe/Moscow',
+            'timezone_name': 'Москва (UTC+3)',
+            'current_slogan': random.choice(SLOGANS),
+            'slogan_updated': datetime.now().isoformat()
         }
     
     stats[user_id]['last_seen'] = datetime.now().isoformat()
@@ -140,6 +138,12 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
         stats[user_id]['timezone'] = timezone
         stats[user_id]['timezone_name'] = TIMEZONES.get(timezone, {}).get('name', timezone)
     
+    if slogan:
+        stats[user_id]['current_slogan'] = slogan
+    
+    if slogan_time:
+        stats[user_id]['slogan_updated'] = slogan_time.isoformat()
+    
     save_user_stats(stats)
     return stats[user_id]
 
@@ -149,7 +153,47 @@ def get_user_timezone(user_id):
     user_id = str(user_id)
     if user_id in stats and 'timezone' in stats[user_id]:
         return stats[user_id]['timezone']
-    return 'Europe/Moscow'  # По умолчанию Москва
+    return 'Europe/Moscow'
+
+def get_user_slogan(user_id):
+    """Возвращает слоган для пользователя (обновляется раз в 24 часа)"""
+    stats = load_user_stats()
+    user_id = str(user_id)
+    now = datetime.now()
+    
+    # Если пользователь есть в статистике
+    if user_id in stats:
+        current_slogan = stats[user_id].get('current_slogan')
+        slogan_updated = stats[user_id].get('slogan_updated')
+        
+        if slogan_updated:
+            last_update = datetime.fromisoformat(slogan_updated)
+            hours_passed = (now - last_update).total_seconds() / 3600
+            
+            # Если прошло меньше 24 часов, возвращаем текущий слоган
+            if hours_passed < 24:
+                return current_slogan
+    
+    # Выбираем новый слоган (желательно не повторяя предыдущий)
+    new_slogan = random.choice(SLOGANS)
+    
+    # Если есть текущий слоган и он совпадает с новым, пробуем еще раз
+    if user_id in stats and 'current_slogan' in stats[user_id]:
+        attempts = 0
+        while new_slogan == stats[user_id]['current_slogan'] and attempts < 10 and len(SLOGANS) > 1:
+            new_slogan = random.choice(SLOGANS)
+            attempts += 1
+    
+    # Обновляем статистику
+    if user_id in stats:
+        stats[user_id]['current_slogan'] = new_slogan
+        stats[user_id]['slogan_updated'] = now.isoformat()
+        save_user_stats(stats)
+    else:
+        # Если пользователя нет в статистике
+        update_user_stats(int(user_id), '', '', '', slogan=new_slogan, slogan_time=now)
+    
+    return new_slogan
 
 # Глобальные переменные
 user_alerts = load_user_alerts()
@@ -578,7 +622,8 @@ class CurrencyMonitor:
             name = data.get('first_name', '')
             if data.get('username'):
                 name += f" (@{data['username']})"
-            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n"
+            slogan = data.get('current_slogan', '—')
+            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n   📢 {slogan}\n"
         
         msg += "\n📈 <b>Популярные пары:</b>\n"
         all_pairs = []
@@ -653,7 +698,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню со случайным слоганом"""
+        """Главное меню со слоганом, обновляемым раз в 24 часа"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -663,7 +708,8 @@ class CurrencyMonitor:
                     [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}]
                 ]
             }
-            await self.send_telegram_message_with_keyboard(chat_id, get_random_slogan(), keyboard)
+            slogan = get_user_slogan(chat_id)
+            await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
             return
         
         # Получаем алерты пользователя
@@ -786,8 +832,11 @@ class CurrencyMonitor:
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
         ])
         
-        # Отправляем сообщение со случайным слоганом
-        await self.send_telegram_message_with_keyboard(chat_id, get_random_slogan(), keyboard)
+        # Получаем слоган для пользователя (обновляется раз в 24 часа)
+        slogan = get_user_slogan(chat_id)
+        
+        # Отправляем сообщение со слоганом
+        await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
     
     async def handle_alert_input(self, chat_id, text):
         try:
@@ -1206,7 +1255,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"🔄 Ротация слоганов: {len(SLOGANS)} вариантов")
+        logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
