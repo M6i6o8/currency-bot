@@ -6,6 +6,7 @@ import os
 import json
 import sys
 import re
+import random
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
@@ -41,6 +42,40 @@ else:
 # Файлы для хранения данных
 USER_ALERTS_FILE = "user_alerts.json"
 STATS_FILE = "user_stats.json"
+
+# Список слоганов для ротации
+SLOGANS = [
+    "💰 Цена имеет значение",
+    "🎯 Поймай момент",
+    "⚡️ Быстрее рынка",
+    "📈 Твой личный скальпер",
+    "🔥 Где деньги? Здесь.",
+    "🚀 Ловим луну вместе",
+    "💸 Деньги любят счёт",
+    "🎰 Играй по-крупному",
+    "💹 Мониторинг 24/7",
+    "🤑 Ни одной упущенной цели",
+    "😎 Бот не спит — ты отдыхаешь",
+    "🎯 Точность — вежливость королей",
+    "📊 Цены в реальном времени",
+    "⚡️ Мгновенные уведомления",
+    "🪙 Крипта, валюта, металлы",
+    "💎 Твой финансовый помощник",
+    "📈 Следи за ценой — зарабатывай",
+    "🎯 Попал в точку",
+    "🚀 Крипто-скальпер",
+    "💼 Серьёзный инструмент",
+    "🐂 Время покупать",
+    "🐻 Осторожно, коррекция",
+    "🎄 Рынок под ёлкой",
+    "❄️ Зимние ставки",
+    "🍺 Пятница, цены падают",
+    "🎉 Выходные близко",
+]
+
+def get_random_slogan():
+    """Возвращает случайный слоган из списка"""
+    return random.choice(SLOGANS)
 
 def load_user_alerts():
     """Загружает алерты"""
@@ -618,7 +653,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню с одной колонкой (без заголовка)"""
+        """Главное меню со случайным слоганом"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -628,7 +663,7 @@ class CurrencyMonitor:
                     [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}]
                 ]
             }
-            await self.send_telegram_message_with_keyboard(chat_id, "", keyboard)
+            await self.send_telegram_message_with_keyboard(chat_id, get_random_slogan(), keyboard)
             return
         
         # Получаем алерты пользователя
@@ -751,8 +786,8 @@ class CurrencyMonitor:
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}
         ])
         
-        # Отправляем пустое сообщение с клавиатурой
-        await self.send_telegram_message_with_keyboard(chat_id, "", keyboard)
+        # Отправляем сообщение со случайным слоганом
+        await self.send_telegram_message_with_keyboard(chat_id, get_random_slogan(), keyboard)
     
     async def handle_alert_input(self, chat_id, text):
         try:
@@ -854,9 +889,14 @@ class CurrencyMonitor:
                 logger.info(f"⛔ Запрещен: {chat_id}")
                 return
             
+            # Для /start и /menu всегда показываем свежее меню
             if text in ['/start', '/menu']:
+                # Очищаем состояние, если оно было
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
+                    logger.info(f"Очищено состояние для {chat_id}")
+                
+                # Показываем меню
                 await self.show_main_menu(chat_id)
                 return
             
@@ -872,11 +912,9 @@ class CurrencyMonitor:
                 await self.handle_alert_input(chat_id, text)
                 return
             
-            if text == '/alert':
-                await self.handle_pair_management(chat_id, 'EUR/USD')
-            else:
-                await self.show_main_menu(chat_id)
-                
+            # Если ничего не подошло - показываем меню
+            await self.show_main_menu(chat_id)
+            
         except Exception as e:
             logger.error(f"Error in handle_telegram_commands: {e}")
     
@@ -1168,6 +1206,7 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
+        logger.info(f"🔄 Ротация слоганов: {len(SLOGANS)} вариантов")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
