@@ -74,7 +74,7 @@ def save_user_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
-def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None, pinned_pairs=None):
+def update_user_stats(chat_id, username, first_name, last_name, pair=None, timezone=None):
     """Обновляет статистику пользователя"""
     stats = load_user_stats()
     user_id = str(chat_id)
@@ -90,8 +90,7 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
             'alerts_triggered': 0,
             'pairs': [],
             'timezone': 'Europe/Moscow',  # По умолчанию Москва
-            'timezone_name': 'Москва (UTC+3)',
-            'pinned_pairs': []  # Закрепленные пары
+            'timezone_name': 'Москва (UTC+3)'
         }
     
     stats[user_id]['last_seen'] = datetime.now().isoformat()
@@ -106,9 +105,6 @@ def update_user_stats(chat_id, username, first_name, last_name, pair=None, timez
         stats[user_id]['timezone'] = timezone
         stats[user_id]['timezone_name'] = TIMEZONES.get(timezone, {}).get('name', timezone)
     
-    if pinned_pairs is not None:
-        stats[user_id]['pinned_pairs'] = pinned_pairs
-    
     save_user_stats(stats)
     return stats[user_id]
 
@@ -119,14 +115,6 @@ def get_user_timezone(user_id):
     if user_id in stats and 'timezone' in stats[user_id]:
         return stats[user_id]['timezone']
     return 'Europe/Moscow'  # По умолчанию Москва
-
-def get_user_pinned_pairs(user_id):
-    """Возвращает закрепленные пары пользователя"""
-    stats = load_user_stats()
-    user_id = str(user_id)
-    if user_id in stats and 'pinned_pairs' in stats[user_id]:
-        return stats[user_id]['pinned_pairs']
-    return []
 
 # Глобальные переменные
 user_alerts = load_user_alerts()
@@ -555,8 +543,7 @@ class CurrencyMonitor:
             name = data.get('first_name', '')
             if data.get('username'):
                 name += f" (@{data['username']})"
-            pinned_count = len(data.get('pinned_pairs', []))
-            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ. (📌 {pinned_count})\n"
+            msg += f"{i}. {name} — {data.get('interactions', 0)} сообщ.\n"
         
         msg += "\n📈 <b>Популярные пары:</b>\n"
         all_pairs = []
@@ -631,7 +618,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню: кнопка закрепления слева от названия пары"""
+        """Главное меню с индикацией активных алертов"""
         rates = await self.fetch_rates()
         if not rates:
             # Если не удалось получить курсы, показываем упрощенное меню
@@ -644,9 +631,8 @@ class CurrencyMonitor:
             await self.send_telegram_message_with_keyboard(chat_id, "🔍 Выбери действие:", keyboard)
             return
         
-        # Получаем закрепленные пары пользователя
+        # Получаем алерты пользователя
         user_id = str(chat_id)
-        pinned_pairs = get_user_pinned_pairs(user_id)
         user_alerts_list = user_alerts.get(user_id, [])
         
         # Функция для получения индикатора количества алертов
@@ -751,38 +737,29 @@ class CurrencyMonitor:
                 'alert_count': alert_count
             })
         
-        # Сортируем все пары (сначала закрепленные, потом остальные по алфавиту)
-        pinned_items = []
-        regular_items = []
+        # Сортируем все пары по алфавиту
+        all_pairs_data.sort(key=lambda x: x['pair'])
         
-        for item in all_pairs_data:
-            if item['pair'] in pinned_pairs:
-                pinned_items.append(item)
-            else:
-                regular_items.append(item)
-        
-        pinned_items.sort(key=lambda x: x['pair'])
-        regular_items.sort(key=lambda x: x['pair'])
-        
-        sorted_pairs = pinned_items + regular_items
-        
-        # Формируем клавиатуру: кнопка закрепления слева, название пары справа
+        # Формируем двухколоночную клавиатуру
         keyboard = {"inline_keyboard": []}
         
-        for item in sorted_pairs:
-            pair = item['pair']
-            text = item['text']
-            is_pinned = pair in pinned_pairs
+        # Проходим по парам парами для компактного отображения
+        for i in range(0, len(all_pairs_data), 2):
+            row = []
             
-            # Кнопка закрепления слева
-            pin_emoji = "📍" if is_pinned else "📌"
-            pin_button = {"text": pin_emoji, "callback_data": f"toggle_pin_{pair}"}
+            # Первая колонка
+            item1 = all_pairs_data[i]
+            text1 = item1['text']
+            pair1 = item1['pair']
+            row.append({"text": text1, "callback_data": f"manage_{pair1}"})
             
-            # Кнопка с названием пары справа
-            pair_button = {"text": text, "callback_data": f"manage_{pair}"}
+            # Вторая колонка (если есть)
+            if i + 1 < len(all_pairs_data):
+                item2 = all_pairs_data[i + 1]
+                text2 = item2['text']
+                pair2 = item2['pair']
+                row.append({"text": text2, "callback_data": f"manage_{pair2}"})
             
-            # Объединяем в одну строку: сначала закрепление, потом пара
-            row = [pin_button, pair_button]
             keyboard["inline_keyboard"].append(row)
         
         # Кнопки внизу
@@ -952,28 +929,6 @@ class CurrencyMonitor:
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
-            elif data.startswith("toggle_pin_"):
-                pair = data.replace("toggle_pin_", "")
-                user_id = str(chat_id)
-                stats = load_user_stats()
-                
-                if user_id not in stats:
-                    stats[user_id] = {'pinned_pairs': []}
-                
-                pinned_pairs = stats[user_id].get('pinned_pairs', [])
-                
-                if pair in pinned_pairs:
-                    # Открепляем
-                    pinned_pairs = [p for p in pinned_pairs if p != pair]
-                    await self.send_telegram_message(chat_id, f"📍 {pair} откреплена")
-                else:
-                    # Закрепляем
-                    pinned_pairs.append(pair)
-                    await self.send_telegram_message(chat_id, f"📌 {pair} закреплена")
-                
-                # Обновляем статистику
-                update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
-                await self.show_main_menu(chat_id)
             elif data.startswith("delete_specific_"):
                 # Формат: delete_specific_EUR/USD_1
                 try:
@@ -1216,7 +1171,6 @@ class CurrencyMonitor:
         logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"📌 Кнопка закрепления слева от названия пары")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
