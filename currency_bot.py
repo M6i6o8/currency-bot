@@ -855,7 +855,7 @@ class CurrencyMonitor:
             )
     
     async def show_main_menu(self, chat_id):
-        """Главное меню со слоганом и тремя кнопками внизу (закрепленные пары внизу)"""
+        """Главное меню со слоганом, индикаторами алертов и закреплений"""
         rates = await self.fetch_rates()
         if not rates:
             keyboard = {
@@ -889,6 +889,9 @@ class CurrencyMonitor:
             else:
                 return f" {count}️⃣"
         
+        def get_pin_indicator(pair):
+            return " 📌" if pair in pinned_pairs else ""
+        
         all_pairs = []
         
         # Валюты (9 пар)
@@ -898,8 +901,9 @@ class CurrencyMonitor:
                 rate = rates[pair]
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
-                indicator = get_alert_indicator(alert_count)
-                text = f"💶 {pair}: {rate:.4f}{indicator}"
+                alert_indicator = get_alert_indicator(alert_count)
+                pin_indicator = get_pin_indicator(pair)
+                text = f"💶 {pair}: {rate:.4f}{alert_indicator}{pin_indicator}"
                 all_pairs.append({
                     'pair': pair,
                     'text': text,
@@ -913,8 +917,9 @@ class CurrencyMonitor:
                 rate = rates[pair]
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
-                indicator = get_alert_indicator(alert_count)
-                text = f"🏅 {pair}: ${rate:,.2f}{indicator}"
+                alert_indicator = get_alert_indicator(alert_count)
+                pin_indicator = get_pin_indicator(pair)
+                text = f"🏅 {pair}: ${rate:,.2f}{alert_indicator}{pin_indicator}"
                 all_pairs.append({
                     'pair': pair,
                     'text': text,
@@ -928,16 +933,17 @@ class CurrencyMonitor:
                 rate = rates[pair]
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
-                indicator = get_alert_indicator(alert_count)
+                alert_indicator = get_alert_indicator(alert_count)
+                pin_indicator = get_pin_indicator(pair)
                 
                 if pair in ['BTC/USD', 'ETH/USD']:
-                    text = f"₿ {pair}: ${rate:,.2f}{indicator}"
+                    text = f"₿ {pair}: ${rate:,.2f}{alert_indicator}{pin_indicator}"
                 elif pair == 'SOL/USD':
-                    text = f"🟪 {pair}: ${rate:.2f}{indicator}"
+                    text = f"🟪 {pair}: ${rate:.2f}{alert_indicator}{pin_indicator}"
                 elif pair in ['XRP/USD', 'DOGE/USD']:
-                    text = f"⚡️ {pair}: ${rate:.4f}{indicator}"
+                    text = f"⚡️ {pair}: ${rate:.4f}{alert_indicator}{pin_indicator}"
                 else:
-                    text = f"🪙 {pair}: ${rate:.2f}{indicator}"
+                    text = f"🪙 {pair}: ${rate:.2f}{alert_indicator}{pin_indicator}"
                 
                 all_pairs.append({
                     'pair': pair,
@@ -952,8 +958,9 @@ class CurrencyMonitor:
                 rate = rates[pair]
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
-                indicator = get_alert_indicator(alert_count)
-                text = f"📈 {pair}: ${rate:,.2f}{indicator}"
+                alert_indicator = get_alert_indicator(alert_count)
+                pin_indicator = get_pin_indicator(pair)
+                text = f"📈 {pair}: ${rate:,.2f}{alert_indicator}{pin_indicator}"
                 all_pairs.append({
                     'pair': pair,
                     'text': text,
@@ -967,11 +974,12 @@ class CurrencyMonitor:
                 rate = rates[pair]
                 alert_count = sum(1 for alert in user_alerts_list 
                                   if alert.get('pair') == pair and alert.get('active'))
-                indicator = get_alert_indicator(alert_count)
+                alert_indicator = get_alert_indicator(alert_count)
+                pin_indicator = get_pin_indicator(pair)
                 if pair == 'CORN/USD':
-                    text = f"🌽 {pair}: ${rate:.2f}{indicator}"
+                    text = f"🌽 {pair}: ${rate:.2f}{alert_indicator}{pin_indicator}"
                 else:
-                    text = f"🛢️ {pair}: ${rate:.2f}{indicator}"
+                    text = f"🛢️ {pair}: ${rate:.2f}{alert_indicator}{pin_indicator}"
                 all_pairs.append({
                     'pair': pair,
                     'text': text,
@@ -1171,13 +1179,10 @@ class CurrencyMonitor:
                 pinned_pairs = stats[user_id].get('pinned_pairs', [])
                 
                 if pair in pinned_pairs:
-                    # Открепляем
                     pinned_pairs = [p for p in pinned_pairs if p != pair]
                 else:
-                    # Закрепляем
                     pinned_pairs.append(pair)
                 
-                # Обновляем статистику
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
                 # Сразу возвращаемся в главное меню (без уведомлений)
@@ -1432,7 +1437,7 @@ class CurrencyMonitor:
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя (50+ вариантов)")
-        logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
+        logger.info(f"📌 Закрепленные пары отмечены 📌 в главном меню")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
