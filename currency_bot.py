@@ -1180,8 +1180,8 @@ class CurrencyMonitor:
                 # Обновляем статистику
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
-                # Возвращаемся в меню закрепления (без уведомлений)
-                await self.show_pin_menu(chat_id)
+                # Сразу возвращаемся в главное меню (без уведомлений)
+                await self.show_main_menu(chat_id)
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
