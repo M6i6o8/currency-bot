@@ -366,16 +366,15 @@ class CurrencyMonitor:
         return self.last_successful_rates.get('XAG/USD', 30.0)
     
     async def fetch_indices(self):
-        """Получает значения индексов из нескольких источников"""
+        """Получает значения индексов из нескольких источников с переключением"""
         now = datetime.now()
+        result = {}
         
-        # Если обновляли меньше минуты назад - возвращаем кэш
+        # Проверяем кэш (обновляем не чаще раза в минуту)
         if self.last_indices_update and self.cached_indices:
             if (now - self.last_indices_update).total_seconds() < 60:
-                logger.info("📊 Индексы из кэша")
+                logger.info("📊 Индексы из кэша (обновление раз в минуту)")
                 return self.cached_indices
-        
-        result = {}
         
         # Источник 1: Twelve Data (основной)
         try:
@@ -393,6 +392,10 @@ class CurrencyMonitor:
                         self.cached_indices = result
                         self.last_indices_update = now
                         return result
+                    else:
+                        logger.warning(f"Twelve Data вернул пустые данные")
+                else:
+                    logger.warning(f"Twelve Data вернул статус {response.status}")
         except Exception as e:
             logger.warning(f"Twelve Data error: {e}")
         
@@ -424,8 +427,38 @@ class CurrencyMonitor:
         except Exception as e:
             logger.warning(f"Alpha Vantage error: {e}")
         
-        # Источник 3: Запасные данные
-        logger.warning("⚠️ Использую кэшированные значения индексов")
+        # Источник 3: Yahoo Finance (аварийный)
+        try:
+            session = await self.get_session()
+            
+            # S&P 500 через SPY
+            url_spy = "https://query1.finance.yahoo.com/v8/finance/chart/SPY"
+            async with session.get(url_spy, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                        price = data['chart']['result'][0]['meta']['regularMarketPrice']
+                        result['S&P 500'] = float(price)
+            
+            # NASDAQ через QQQ
+            url_qqq = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ"
+            async with session.get(url_qqq, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                        price = data['chart']['result'][0]['meta']['regularMarketPrice']
+                        result['NASDAQ'] = float(price)
+            
+            if result:
+                logger.info("✅ Индексы от Yahoo Finance")
+                self.cached_indices = result
+                self.last_indices_update = now
+                return result
+        except Exception as e:
+            logger.warning(f"Yahoo Finance error: {e}")
+        
+        # Если все источники упали, возвращаем кэш
+        logger.warning("⚠️ Все источники индексов недоступны, использую кэш")
         return self.cached_indices if self.cached_indices else {
             'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
             'NASDAQ': self.last_successful_rates.get('NASDAQ', 18000.0)
@@ -1377,6 +1410,7 @@ class CurrencyMonitor:
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
+        logger.info(f"📈 Индексы из 3 источников с кэшированием")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
