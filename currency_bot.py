@@ -7,11 +7,19 @@ import json
 import sys
 import re
 import random
-import yfinance as yf
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
 from collections import Counter
+
+# Проверяем наличие yfinance
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+    logger.info("✅ yfinance доступен")
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    logger.warning("⚠️ yfinance не установлен, индексы будут через другие источники")
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -377,32 +385,32 @@ class CurrencyMonitor:
                 logger.info("📊 Индексы из кэша (обновление раз в минуту)")
                 return self.cached_indices
         
-        # Источник 1: yfinance (самый надежный, не требует ключей)
-        try:
-            # Получаем данные для SPY и QQQ
-            spy = yf.Ticker("SPY")
-            qqq = yf.Ticker("QQQ")
-            
-            spy_info = spy.info
-            qqq_info = qqq.info
-            
-            if 'regularMarketPrice' in spy_info:
-                result['S&P 500'] = float(spy_info['regularMarketPrice'])
-            elif 'currentPrice' in spy_info:
-                result['S&P 500'] = float(spy_info['currentPrice'])
-            
-            if 'regularMarketPrice' in qqq_info:
-                result['NASDAQ'] = float(qqq_info['regularMarketPrice'])
-            elif 'currentPrice' in qqq_info:
-                result['NASDAQ'] = float(qqq_info['currentPrice'])
-            
-            if result:
-                logger.info("✅ Индексы от yfinance")
-                self.cached_indices = result
-                self.last_indices_update = now
-                return result
-        except Exception as e:
-            logger.warning(f"yfinance error: {e}")
+        # Источник 1: yfinance (если доступен)
+        if YFINANCE_AVAILABLE:
+            try:
+                spy = yf.Ticker("SPY")
+                qqq = yf.Ticker("QQQ")
+                
+                spy_info = spy.info
+                qqq_info = qqq.info
+                
+                if 'regularMarketPrice' in spy_info:
+                    result['S&P 500'] = float(spy_info['regularMarketPrice'])
+                elif 'currentPrice' in spy_info:
+                    result['S&P 500'] = float(spy_info['currentPrice'])
+                
+                if 'regularMarketPrice' in qqq_info:
+                    result['NASDAQ'] = float(qqq_info['regularMarketPrice'])
+                elif 'currentPrice' in qqq_info:
+                    result['NASDAQ'] = float(qqq_info['currentPrice'])
+                
+                if result:
+                    logger.info("✅ Индексы от yfinance")
+                    self.cached_indices = result
+                    self.last_indices_update = now
+                    return result
+            except Exception as e:
+                logger.warning(f"yfinance error: {e}")
         
         # Источник 2: Yahoo Finance API (если yfinance не сработал)
         try:
@@ -1504,7 +1512,10 @@ class CurrencyMonitor:
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
-        logger.info(f"📈 Индексы из 6 источников с yfinance в приоритете")
+        if YFINANCE_AVAILABLE:
+            logger.info(f"📈 Индексы: yfinance доступен")
+        else:
+            logger.info(f"📈 Индексы: yfinance не установлен, используются другие источники")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
