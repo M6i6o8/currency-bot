@@ -1171,12 +1171,16 @@ class CurrencyMonitor:
                 pinned_pairs = stats[user_id].get('pinned_pairs', [])
                 
                 if pair in pinned_pairs:
+                    # Открепляем
                     pinned_pairs = [p for p in pinned_pairs if p != pair]
                 else:
+                    # Закрепляем
                     pinned_pairs.append(pair)
                 
+                # Обновляем статистику
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
+                # Возвращаемся в меню закрепления (без уведомлений)
                 await self.show_pin_menu(chat_id)
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
