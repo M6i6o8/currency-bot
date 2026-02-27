@@ -53,6 +53,24 @@ else:
 USER_ALERTS_FILE = "user_alerts.json"
 STATS_FILE = "user_stats.json"
 
+# Словарь для конвертации цифр в эмодзи
+DIGIT_TO_EMOJI = {
+    '0': '0️⃣',
+    '1': '1️⃣',
+    '2': '2️⃣',
+    '3': '3️⃣',
+    '4': '4️⃣',
+    '5': '5️⃣',
+    '6': '6️⃣',
+    '7': '7️⃣',
+    '8': '8️⃣',
+    '9': '9️⃣',
+}
+
+def number_to_emoji(num):
+    """Конвертирует число в эмодзи-цифры (например, 10 -> 1️⃣0️⃣)"""
+    return ''.join(DIGIT_TO_EMOJI[d] for d in str(num))
+
 # Список слоганов и мудрых цитат для ротации
 SLOGANS = [
     # Твои старые слоганы
@@ -813,7 +831,7 @@ class CurrencyMonitor:
         if active_alerts:
             alerts_text = ""
             for i, alert in enumerate(active_alerts, 1):
-                alerts_text += f"{i}. 🎯 {alert['target']}\n"
+                alerts_text += f"{number_to_emoji(i)} 🎯 {alert['target']}\n"
             
             keyboard = {"inline_keyboard": []}
             
@@ -834,7 +852,7 @@ class CurrencyMonitor:
             await self.send_telegram_message_with_keyboard(
                 chat_id,
                 f"📊 {pair}\n\n"
-                f"Всего алертов: {len(active_alerts)}\n\n"
+                f"Всего алертов: {len(active_alerts)} {number_to_emoji(len(active_alerts))}\n\n"
                 f"{alerts_text}",
                 keyboard
             )
@@ -876,18 +894,8 @@ class CurrencyMonitor:
         def get_alert_indicator(count):
             if count == 0:
                 return ""
-            elif count == 1:
-                return " 1️⃣"
-            elif count == 2:
-                return " 2️⃣"
-            elif count == 3:
-                return " 3️⃣"
-            elif count == 4:
-                return " 4️⃣"
-            elif count == 5:
-                return " 5️⃣"
             else:
-                return f" {count}️⃣"
+                return f" {number_to_emoji(count)}"
         
         def get_pin_indicator(pair):
             return " 📌" if pair in pinned_pairs else ""
@@ -1082,7 +1090,7 @@ class CurrencyMonitor:
             status = "✅" if alert.get('active', False) else "⚡️"
             target = alert.get('target') or alert.get('target_price') or '?'
             pair = alert.get('pair', '?')
-            msg += f"{i}. {status} {pair} = {target}\n"
+            msg += f"{number_to_emoji(i)} {status} {pair} = {target}\n"
             keyboard["inline_keyboard"].append(
                 [{"text": f"❌ Удалить {i}", "callback_data": f"delete_{i}"}]
             )
@@ -1438,6 +1446,7 @@ class CurrencyMonitor:
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя (50+ вариантов)")
         logger.info(f"📌 Закрепленные пары отмечены 📌 в главном меню")
+        logger.info(f"🔢 Для 10+ алертов используются составные эмодзи-цифры")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
