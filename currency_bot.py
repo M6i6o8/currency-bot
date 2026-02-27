@@ -15,7 +15,7 @@ from collections import Counter
 # Загружаем переменные окружения
 load_dotenv()
 
-# Настройка логирования ДО проверки yfinance
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info("🚀 Бот запускается...")
@@ -29,99 +29,6 @@ except ImportError:
     YFINANCE_AVAILABLE = False
     logger.warning("⚠️ yfinance не установлен, индексы будут через другие источники")
 
-# Конфигурация Telegram
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-
-# API ключи
-TWELVEDATA_KEY = os.getenv('TWELVEDATA_KEY')
-
-# ===== НАСТРОЙКА ДОСТУПА =====
-ALLOWED_USER_IDS = [
-    5799391012,  # ТВОЙ ID
-]
-
-DEFAULT_MODE = "public"  # public - открыт для всех, private - только для своих
-# ============================
-
-if len(sys.argv) > 1:
-    mode_arg = sys.argv[1].lower()
-    PRIVATE_MODE = (mode_arg == "private")
-else:
-    PRIVATE_MODE = (DEFAULT_MODE == "private")
-
-# Файлы для хранения данных
-USER_ALERTS_FILE = "user_alerts.json"
-STATS_FILE = "user_stats.json"
-
-# Список слоганов и мудрых цитат для ротации
-SLOGANS = [
-    # Твои старые слоганы
-    "💰 Цена имеет значение",
-    "🎯 Поймай момент",
-    "⚡️ Быстрее рынка",
-    "📈 Твой личный скальпер",
-    "🔥 Где деньги? Здесь.",
-    "🚀 Ловим луну вместе",
-    "💸 Деньги любят счёт",
-    "🎰 Играй по-крупному",
-    "💹 Мониторинг 24/7",
-    "🤑 Ни одной упущенной цели",
-    "😎 Бот не спит — ты отдыхаешь",
-    "🎯 Точность — вежливость королей",
-    "📊 Цены в реальном времени",
-    "⚡️ Мгновенные уведомления",
-    "🪙 Крипта, валюта, металлы",
-    "💎 Твой финансовый помощник",
-    "📈 Следи за ценой — зарабатывай",
-    "🎯 Попал в точку",
-    "🚀 Крипто-скальпер",
-    "💼 Серьёзный инструмент",
-    "🐂 Время покупать",
-    "🐻 Осторожно, коррекция",
-    "🎄 Рынок под ёлкой",
-    "❄️ Зимние ставки",
-    "🍺 Пятница, цены падают",
-    "🎉 Выходные близко",
-    
-    # 🔥 Мудрые цитаты великих трейдеров
-    "🧠 Рынок переводит деньги от нетерпеливых к терпеливым — У. Баффет",
-    "🎯 Важно не быть правым, а сколько ты зарабатываешь когда прав — Дж. Сорос",
-    "🛡️ Лучшие трейдеры не самые умные, а самые дисциплинированные",
-    "⏳ Деньги делают, выжидая, а не торгуя — Д. Ливермор",
-    "📉 Позволять убыткам расти — самая серьезная ошибка — У. О'Нил",
-    "🧘 Учитесь принимать убытки — М. Шварц",
-    "🌊 Рынок — океан, волны эмоций бьются о скалы дисциплины",
-    "📊 Свечи на графике — истории жадности и страха",
-    "💃 Трейдинг — танец с хаосом",
-    "🎭 Рынок никогда не бывает очевиден — Д. Ливермор",
-    "🧪 Если вы не контролируете эмоции, вы не контролируете деньги — У. Баффет",
-    "🏦 Фондовый рынок заполнен людьми, знающими цену всему, но не ценность — Ф. Фишер",
-    "⏰ Время — друг, импульс — враг — Д. Богл",
-    "🔮 Лучшая формация — та, которую ты не торгуешь",
-    "⚖️ Риск возникает из незнания того, что вы делаете — У. Баффет",
-    "🎲 Торговля — игра вероятностей",
-    "📝 Планируй торговлю и торгуй по плану — М. Дуглас",
-    "🧗 Выживание — единственный путь к богатству — П. Бернстайн",
-    "🐑 Люди сходят с ума толпой, а приходят в себя поодиночке — Ч. Маккей",
-    "⚠️ «На этот раз всё по-другому» — самые опасные слова — Д. Темплтон",
-    "📈 Бычий рынок рождается на пессимизме, умирает на эйфории — Д. Темплтон",
-    "🤔 Если не знаешь себя, рынок — дорогое место чтобы это выяснить — А. Смит",
-    "💰 Бойся, когда другие жадны. Будь жадным, когда другие боятся — У. Баффет",
-    "🧠 Трейдинг раскрывает характер и формирует его — И. Бьеджи",
-    "🎪 Рынок одурачивает как можно больше людей — Б. Барух",
-    "📚 Учитесь на чужих ошибках — на своих учиться слишком долго",
-    "🔁 Что было, то будет — рынки повторяются — Д. Ливермор",
-    "🧘‍♂️ Не пытайся вести рынок — учись чувствовать его импульс",
-    "📉 Прибыль — это правильное действие в правильном месте — Дж. Сорос",
-    "🧠 Интуиция трейдера — это сжатый опыт",
-    "💪 Сила воли — капитал, самодисциплина — процентная ставка",
-    "🎯 Вход — искусство, выход — талант",
-    "📊 Рынок — тест на эмоциональную зрелость",
-    "🧘 Терпение — не просто ожидание, а сохранение фокуса",
-    "📈 Тренд — твой друг до последнего",
-    "🛑 Стоп-лосс — ремень безопасности трейдера",
-    "🚀 Удача улыбается тем, кто готов к ее улыбке",
-]
 # Конфигурация Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
@@ -384,35 +291,37 @@ class CurrencyMonitor:
         self.last_update_id = 0
         self.alert_states = {}
         self.last_successful_rates = {
-            # Валюты
+            # Валюты (9 пар)
             'EUR/USD': 1.08,
             'GBP/USD': 1.26,
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
             'EUR/GBP': 0.87,
-            'USD/CNY': 7.25,  # Китайский юань
+            'USD/CAD': 1.35,
+            'AUD/USD': 0.65,
+            'USD/CHF': 0.88,
+            'USD/CNY': 7.25,
             
-            # Металлы
+            # Металлы (3 пары)
             'XAU/USD': 5160.0,
             'XAG/USD': 30.0,
+            'XPT/USD': 1000.0,
             
-            # Крипта
+            # Крипта (5 пар)
             'BTC/USD': 67000.0,
             'ETH/USD': 1950.0,
             'SOL/USD': 84.0,
-            'BNB/USD': 610.0,
-            'LINK/USD': 8.6,
-            'TON/USD': 1.35,
             'XRP/USD': 1.40,
             'DOGE/USD': 0.098,
-            'AVAX/USD': 9.1,
             
-            # Индексы
+            # Индексы (2 пары)
             'S&P 500': 5100.0,
             'NASDAQ': 18000.0,
             
-            # Товары
-            'CORN/USD': 4.50
+            # Товары (3 пары)
+            'CORN/USD': 4.50,
+            'WTI/USD': 75.0,
+            'BRENT/USD': 78.0,
         }
         
         # Для кэширования индексов
@@ -434,7 +343,7 @@ class CurrencyMonitor:
         return self.session
     
     async def fetch_from_binance(self):
-        """Получает курсы криптовалют с Binance"""
+        """Получает курсы криптовалют с Binance (только выбранные)"""
         try:
             session = await self.get_session()
             result = {}
@@ -443,12 +352,8 @@ class CurrencyMonitor:
                 'BTC': 'BTCUSDT',
                 'ETH': 'ETHUSDT',
                 'SOL': 'SOLUSDT',
-                'BNB': 'BNBUSDT',
-                'LINK': 'LINKUSDT',
-                'TON': 'TONUSDT',
                 'XRP': 'XRPUSDT',
                 'DOGE': 'DOGEUSDT',
-                'AVAX': 'AVAXUSDT'
             }
             
             for coin, symbol in symbols.items():
@@ -509,6 +414,58 @@ class CurrencyMonitor:
         
         return self.last_successful_rates.get('XAG/USD', 30.0)
     
+    async def fetch_platinum_price(self):
+        """Получает цену платины через Gold-API"""
+        try:
+            session = await self.get_session()
+            url = "https://api.gold-api.com/price/XPT"
+            
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    price = float(data['price'])
+                    
+                    if price and price > 500 and price < 5000:
+                        logger.info(f"✅ Платина: ${price:.2f}/унция")
+                        return price
+        except Exception as e:
+            logger.error(f"Platinum API error: {e}")
+        
+        return self.last_successful_rates.get('XPT/USD', 1000.0)
+    
+    async def fetch_oil_prices(self):
+        """Получает цены на нефть через yfinance"""
+        if YFINANCE_AVAILABLE:
+            try:
+                wti = yf.Ticker("CL=F")
+                brent = yf.Ticker("BZ=F")
+                
+                wti_info = wti.info
+                brent_info = brent.info
+                
+                result = {}
+                
+                if 'regularMarketPrice' in wti_info:
+                    result['WTI/USD'] = float(wti_info['regularMarketPrice'])
+                elif 'currentPrice' in wti_info:
+                    result['WTI/USD'] = float(wti_info['currentPrice'])
+                
+                if 'regularMarketPrice' in brent_info:
+                    result['BRENT/USD'] = float(brent_info['regularMarketPrice'])
+                elif 'currentPrice' in brent_info:
+                    result['BRENT/USD'] = float(brent_info['currentPrice'])
+                
+                if result:
+                    logger.info(f"✅ Нефть: WTI ${result.get('WTI/USD', 0):.2f}, BRENT ${result.get('BRENT/USD', 0):.2f}")
+                    return result
+            except Exception as e:
+                logger.warning(f"Oil price error: {e}")
+        
+        return {
+            'WTI/USD': self.last_successful_rates.get('WTI/USD', 75.0),
+            'BRENT/USD': self.last_successful_rates.get('BRENT/USD', 78.0)
+        }
+    
     async def fetch_indices(self):
         """Получает значения индексов из нескольких источников с переключением"""
         now = datetime.now()
@@ -547,150 +504,7 @@ class CurrencyMonitor:
             except Exception as e:
                 logger.warning(f"yfinance error: {e}")
         
-        # Источник 2: Yahoo Finance API (если yfinance не сработал)
-        try:
-            session = await self.get_session()
-            
-            # S&P 500 через SPY
-            url_spy = "https://query1.finance.yahoo.com/v8/finance/chart/SPY"
-            async with session.get(url_spy, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
-                        price = data['chart']['result'][0]['meta']['regularMarketPrice']
-                        result['S&P 500'] = float(price)
-            
-            # NASDAQ через QQQ
-            url_qqq = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ"
-            async with session.get(url_qqq, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
-                        price = data['chart']['result'][0]['meta']['regularMarketPrice']
-                        result['NASDAQ'] = float(price)
-            
-            if result:
-                logger.info("✅ Индексы от Yahoo Finance")
-                self.cached_indices = result
-                self.last_indices_update = now
-                return result
-        except Exception as e:
-            logger.warning(f"Yahoo Finance error: {e}")
-        
-        # Источник 3: Twelve Data (основной API)
-        try:
-            session = await self.get_session()
-            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
-            async with session.get(url, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'SPY' in data and 'close' in data['SPY']:
-                        result['S&P 500'] = float(data['SPY']['close'])
-                    if 'QQQ' in data and 'close' in data['QQQ']:
-                        result['NASDAQ'] = float(data['QQQ']['close'])
-                    if result:
-                        logger.info("✅ Индексы от Twelve Data")
-                        self.cached_indices = result
-                        self.last_indices_update = now
-                        return result
-                    else:
-                        logger.warning(f"Twelve Data вернул пустые данные")
-                else:
-                    logger.warning(f"Twelve Data вернул статус {response.status}")
-        except Exception as e:
-            logger.warning(f"Twelve Data error: {e}")
-        
-        # Источник 4: Alpha Vantage (бесплатный демо-ключ)
-        try:
-            session = await self.get_session()
-            
-            # S&P 500
-            url_spy = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=SPY&apikey=demo"
-            async with session.get(url_spy, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
-                        result['S&P 500'] = float(data['Global Quote']['05. price'])
-            
-            # NASDAQ
-            url_qqq = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=QQQ&apikey=demo"
-            async with session.get(url_qqq, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
-                        result['NASDAQ'] = float(data['Global Quote']['05. price'])
-            
-            if result:
-                logger.info("✅ Индексы от Alpha Vantage")
-                self.cached_indices = result
-                self.last_indices_update = now
-                return result
-        except Exception as e:
-            logger.warning(f"Alpha Vantage error: {e}")
-        
-        # Источник 5: Парсинг MarketBeat/Zacks (без API ключей)
-        try:
-            session = await self.get_session()
-            
-            # S&P 500 через SPY с marketbeat.com
-            url_spy = "https://www.marketbeat.com/stocks/NYSE/SPY/"
-            async with session.get(url_spy, timeout=5) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    price_match = re.search(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', html)
-                    if price_match:
-                        price_str = price_match.group(1).replace(',', '')
-                        result['S&P 500'] = float(price_str)
-            
-            # NASDAQ через QQQ с zacks.com
-            url_qqq = "https://www.zacks.com/funds/etf/QQQ/chart"
-            async with session.get(url_qqq, timeout=5) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    price_match = re.search(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', html)
-                    if price_match:
-                        price_str = price_match.group(1).replace(',', '')
-                        result['NASDAQ'] = float(price_str)
-            
-            if result:
-                logger.info("✅ Индексы от MarketBeat/Zacks (парсинг HTML)")
-                self.cached_indices = result
-                self.last_indices_update = now
-                return result
-        except Exception as e:
-            logger.warning(f"MarketBeat/Zacks error: {e}")
-        
-        # Источник 6: RapidAPI Real-Time Finance (демо-ключ)
-        try:
-            session = await self.get_session()
-            
-            headers = {
-                'x-rapidapi-host': 'real-time-finance-data.p.rapidapi.com',
-                'x-rapidapi-key': 'demo'
-            }
-            
-            url_spy = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=SPY:NASDAQ"
-            async with session.get(url_spy, headers=headers, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'data' in data and 'price' in data['data']:
-                        result['S&P 500'] = float(data['data']['price'])
-            
-            url_qqq = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=QQQ:NASDAQ"
-            async with session.get(url_qqq, headers=headers, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'data' in data and 'price' in data['data']:
-                        result['NASDAQ'] = float(data['data']['price'])
-            
-            if result:
-                logger.info("✅ Индексы от RapidAPI Finance")
-                self.cached_indices = result
-                self.last_indices_update = now
-                return result
-        except Exception as e:
-            logger.warning(f"RapidAPI error: {e}")
-        
+        # Если все источники упали, возвращаем кэш
         logger.warning("⚠️ Все источники индексов недоступны, использую кэш")
         return self.cached_indices if self.cached_indices else {
             'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
@@ -721,7 +535,7 @@ class CurrencyMonitor:
         return self.last_successful_rates.get('CORN/USD', 4.50)
     
     async def fetch_from_fiat_api(self):
-        """Получает курсы фиатных валют"""
+        """Получает курсы фиатных валют (все 9 пар)"""
         try:
             session = await self.get_session()
             url = "https://open.er-api.com/v6/latest/USD"
@@ -731,6 +545,8 @@ class CurrencyMonitor:
                     rates = data['rates']
                     
                     result = {}
+                    
+                    # Основные валюты
                     if 'RUB' in rates:
                         result['USD/RUB'] = rates['RUB']
                     if 'EUR' in rates:
@@ -741,7 +557,14 @@ class CurrencyMonitor:
                         result['USD/JPY'] = rates['JPY']
                     if 'CNY' in rates:
                         result['USD/CNY'] = 1.0 / rates['CNY']
+                    if 'CAD' in rates:
+                        result['USD/CAD'] = rates['CAD']
+                    if 'AUD' in rates:
+                        result['AUD/USD'] = 1.0 / rates['AUD']
+                    if 'CHF' in rates:
+                        result['USD/CHF'] = rates['CHF']
                     
+                    # EUR/GBP
                     if 'EUR' in rates and 'GBP' in rates:
                         eur_usd = 1.0 / rates['EUR']
                         gbp_usd = 1.0 / rates['GBP']
@@ -756,38 +579,48 @@ class CurrencyMonitor:
                 'USD/JPY': self.last_successful_rates.get('USD/JPY', 155.0),
                 'USD/RUB': self.last_successful_rates.get('USD/RUB', 90.0),
                 'EUR/GBP': self.last_successful_rates.get('EUR/GBP', 0.87),
-                'USD/CNY': self.last_successful_rates.get('USD/CNY', 7.25)
+                'USD/CAD': self.last_successful_rates.get('USD/CAD', 1.35),
+                'AUD/USD': self.last_successful_rates.get('AUD/USD', 0.65),
+                'USD/CHF': self.last_successful_rates.get('USD/CHF', 0.88),
+                'USD/CNY': self.last_successful_rates.get('USD/CNY', 7.25),
             }
     
     async def fetch_rates(self):
         """Получает все курсы"""
         all_rates = {}
         
-        # Фиатные валюты
+        # Фиатные валюты (9 пар)
         fiat = await self.fetch_from_fiat_api()
         if fiat:
             all_rates.update(fiat)
         
-        # Криптовалюты
+        # Криптовалюты (5 пар)
         crypto = await self.fetch_from_binance()
         if crypto:
             all_rates.update(crypto)
         
-        # Металлы
+        # Металлы (3 пары)
         gold = await self.fetch_gold_price()
         all_rates['XAU/USD'] = gold
         
         silver = await self.fetch_silver_price()
         all_rates['XAG/USD'] = silver
         
-        # Индексы
+        platinum = await self.fetch_platinum_price()
+        all_rates['XPT/USD'] = platinum
+        
+        # Индексы (2 пары)
         indices = await self.fetch_indices()
         if indices:
             all_rates.update(indices)
         
-        # Товары
+        # Товары (3 пары)
         corn = await self.fetch_corn_price()
         all_rates['CORN/USD'] = corn
+        
+        oil = await self.fetch_oil_prices()
+        if oil:
+            all_rates.update(oil)
         
         if all_rates:
             self.last_successful_rates.update(all_rates)
@@ -882,15 +715,15 @@ class CurrencyMonitor:
         all_pairs = sorted(rates.keys())
         
         for pair in all_pairs:
-            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CNY']:
+            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']:
                 emoji = "💶"
-            elif pair in ['XAU/USD', 'XAG/USD']:
+            elif pair in ['XAU/USD', 'XAG/USD', 'XPT/USD']:
                 emoji = "🏅"
             elif pair in ['BTC/USD', 'ETH/USD']:
                 emoji = "₿"
-            elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
+            elif pair == 'SOL/USD':
                 emoji = "🟪"
-            elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
+            elif pair in ['XRP/USD', 'DOGE/USD']:
                 emoji = "⚡️"
             elif pair == 'S&P 500':
                 emoji = "📈"
@@ -898,6 +731,8 @@ class CurrencyMonitor:
                 emoji = "📊"
             elif pair == 'CORN/USD':
                 emoji = "🌽"
+            elif pair in ['WTI/USD', 'BRENT/USD']:
+                emoji = "🛢️"
             else:
                 emoji = "🪙"
             
@@ -1056,8 +891,8 @@ class CurrencyMonitor:
         
         all_pairs = []
         
-        # Валюты (с USD/CNY)
-        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CNY']
+        # Валюты (9 пар)
+        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']
         for pair in currency_pairs:
             if pair in rates:
                 rate = rates[pair]
@@ -1071,8 +906,8 @@ class CurrencyMonitor:
                     'is_pinned': pair in pinned_pairs
                 })
         
-        # Металлы
-        metals = ['XAU/USD', 'XAG/USD']
+        # Металлы (3 пары)
+        metals = ['XAU/USD', 'XAG/USD', 'XPT/USD']
         for pair in metals:
             if pair in rates:
                 rate = rates[pair]
@@ -1086,8 +921,8 @@ class CurrencyMonitor:
                     'is_pinned': pair in pinned_pairs
                 })
         
-        # Крипта
-        crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'LINK/USD', 'TON/USD', 'XRP/USD', 'DOGE/USD', 'AVAX/USD']
+        # Крипта (5 пар)
+        crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD']
         for pair in crypto_pairs:
             if pair in rates:
                 rate = rates[pair]
@@ -1097,9 +932,9 @@ class CurrencyMonitor:
                 
                 if pair in ['BTC/USD', 'ETH/USD']:
                     text = f"₿ {pair}: ${rate:,.2f}{indicator}"
-                elif pair in ['SOL/USD', 'BNB/USD', 'AVAX/USD', 'LINK/USD']:
+                elif pair == 'SOL/USD':
                     text = f"🟪 {pair}: ${rate:.2f}{indicator}"
-                elif pair in ['XRP/USD', 'DOGE/USD', 'TON/USD']:
+                elif pair in ['XRP/USD', 'DOGE/USD']:
                     text = f"⚡️ {pair}: ${rate:.4f}{indicator}"
                 else:
                     text = f"🪙 {pair}: ${rate:.2f}{indicator}"
@@ -1110,7 +945,7 @@ class CurrencyMonitor:
                     'is_pinned': pair in pinned_pairs
                 })
         
-        # Индексы
+        # Индексы (2 пары)
         indices = ['S&P 500', 'NASDAQ']
         for pair in indices:
             if pair in rates:
@@ -1125,18 +960,23 @@ class CurrencyMonitor:
                     'is_pinned': pair in pinned_pairs
                 })
         
-        # Товары
-        if 'CORN/USD' in rates:
-            rate = rates['CORN/USD']
-            alert_count = sum(1 for alert in user_alerts_list 
-                              if alert.get('pair') == 'CORN/USD' and alert.get('active'))
-            indicator = get_alert_indicator(alert_count)
-            text = f"🌽 CORN/USD: ${rate:.2f}{indicator}"
-            all_pairs.append({
-                'pair': 'CORN/USD',
-                'text': text,
-                'is_pinned': pair in pinned_pairs
-            })
+        # Товары (3 пары)
+        commodities = ['CORN/USD', 'WTI/USD', 'BRENT/USD']
+        for pair in commodities:
+            if pair in rates:
+                rate = rates[pair]
+                alert_count = sum(1 for alert in user_alerts_list 
+                                  if alert.get('pair') == pair and alert.get('active'))
+                indicator = get_alert_indicator(alert_count)
+                if pair == 'CORN/USD':
+                    text = f"🌽 {pair}: ${rate:.2f}{indicator}"
+                else:
+                    text = f"🛢️ {pair}: ${rate:.2f}{indicator}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
         
         pinned_items = [p for p in all_pairs if p['is_pinned']]
         regular_items = [p for p in all_pairs if not p['is_pinned']]
@@ -1479,7 +1319,7 @@ class CurrencyMonitor:
                 
                 current = rates[pair]
                 
-                if pair in ['BTC/USD', 'ETH/USD', 'XAU/USD', 'S&P 500', 'NASDAQ']:
+                if pair in ['BTC/USD', 'ETH/USD', 'XAU/USD', 'XPT/USD', 'S&P 500', 'NASDAQ']:
                     if abs(current - target) / target < 0.0001:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
@@ -1496,7 +1336,7 @@ class CurrencyMonitor:
                         save_user_alerts(user_alerts)
                         logger.info(f"Цель {pair}: {current:.2f}")
                 
-                elif pair in ['DOGE/USD', 'XRP/USD', 'TON/USD']:
+                elif pair in ['DOGE/USD', 'XRP/USD']:
                     if abs(current - target) <= 0.0001:
                         msg = (
                             f"🎯 <b>ЦЕЛЬ ДОСТИГНУТА!</b>\n\n"
@@ -1584,15 +1424,15 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары + юань")
+        logger.info(f"📊 Пары: валюты (9) + металлы (3) + крипта (5) + индексы (2) + товары (3) = 22 пары")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя (50+ вариантов)")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
         if YFINANCE_AVAILABLE:
-            logger.info(f"📈 Индексы: yfinance доступен")
+            logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
-            logger.info(f"📈 Индексы: yfinance не установлен, используются другие источники")
+            logger.info(f"📈 Индексы и нефть: yfinance не установлен, используются другие источники")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
