@@ -12,6 +12,13 @@ from aiohttp import web
 from zoneinfo import ZoneInfo
 from collections import Counter
 
+# Загружаем переменные окружения
+load_dotenv()
+
+# Настройка логирования ДО проверки yfinance
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Проверяем наличие yfinance
 try:
     import yfinance as yf
@@ -20,13 +27,6 @@ try:
 except ImportError:
     YFINANCE_AVAILABLE = False
     logger.warning("⚠️ yfinance не установлен, индексы будут через другие источники")
-
-# Загружаем переменные окружения
-load_dotenv()
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Конфигурация Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
