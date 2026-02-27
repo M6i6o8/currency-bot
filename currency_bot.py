@@ -427,7 +427,7 @@ class CurrencyMonitor:
         except Exception as e:
             logger.warning(f"Alpha Vantage error: {e}")
         
-        # Источник 3: Yahoo Finance (аварийный)
+        # Источник 3: Yahoo Finance через yfinance-style endpoint
         try:
             session = await self.get_session()
             
@@ -456,6 +456,72 @@ class CurrencyMonitor:
                 return result
         except Exception as e:
             logger.warning(f"Yahoo Finance error: {e}")
+        
+        # Источник 4: Парсинг MarketBeat/Zacks (без API ключей)
+        try:
+            session = await self.get_session()
+            
+            # S&P 500 через SPY с marketbeat.com
+            url_spy = "https://www.marketbeat.com/stocks/NYSE/SPY/"
+            async with session.get(url_spy, timeout=5) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    # Ищем цену в HTML (паттерн: $XXX.XX или $X,XXX.XX)
+                    price_match = re.search(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', html)
+                    if price_match:
+                        price_str = price_match.group(1).replace(',', '')
+                        result['S&P 500'] = float(price_str)
+            
+            # NASDAQ через QQQ с zacks.com
+            url_qqq = "https://www.zacks.com/funds/etf/QQQ/chart"
+            async with session.get(url_qqq, timeout=5) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    price_match = re.search(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', html)
+                    if price_match:
+                        price_str = price_match.group(1).replace(',', '')
+                        result['NASDAQ'] = float(price_str)
+            
+            if result:
+                logger.info("✅ Индексы от MarketBeat/Zacks (парсинг HTML)")
+                self.cached_indices = result
+                self.last_indices_update = now
+                return result
+        except Exception as e:
+            logger.warning(f"MarketBeat/Zacks error: {e}")
+        
+        # Источник 5: RapidAPI Real-Time Finance (демо-ключ)
+        try:
+            session = await self.get_session()
+            
+            headers = {
+                'x-rapidapi-host': 'real-time-finance-data.p.rapidapi.com',
+                'x-rapidapi-key': 'demo'  # демо-ключ может работать
+            }
+            
+            # S&P 500 через SPY
+            url_spy = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=SPY:NASDAQ"
+            async with session.get(url_spy, headers=headers, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'data' in data and 'price' in data['data']:
+                        result['S&P 500'] = float(data['data']['price'])
+            
+            # NASDAQ через QQQ
+            url_qqq = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=QQQ:NASDAQ"
+            async with session.get(url_qqq, headers=headers, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'data' in data and 'price' in data['data']:
+                        result['NASDAQ'] = float(data['data']['price'])
+            
+            if result:
+                logger.info("✅ Индексы от RapidAPI Finance")
+                self.cached_indices = result
+                self.last_indices_update = now
+                return result
+        except Exception as e:
+            logger.warning(f"RapidAPI error: {e}")
         
         # Если все источники упали, возвращаем кэш
         logger.warning("⚠️ Все источники индексов недоступны, использую кэш")
@@ -1410,7 +1476,7 @@ class CurrencyMonitor:
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
-        logger.info(f"📈 Индексы из 3 источников с кэшированием")
+        logger.info(f"📈 Индексы из 5 источников с кэшированием (включая парсинг HTML)")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
