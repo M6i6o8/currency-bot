@@ -12,13 +12,6 @@ from aiohttp import web
 from zoneinfo import ZoneInfo
 from collections import Counter
 
-# Загружаем переменные окружения
-load_dotenv()
-
-# Настройка логирования ДО проверки yfinance
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Проверяем наличие yfinance
 try:
     import yfinance as yf
@@ -27,6 +20,13 @@ try:
 except ImportError:
     YFINANCE_AVAILABLE = False
     logger.warning("⚠️ yfinance не установлен, индексы будут через другие источники")
+
+# Загружаем переменные окружения
+load_dotenv()
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Конфигурация Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -52,8 +52,9 @@ else:
 USER_ALERTS_FILE = "user_alerts.json"
 STATS_FILE = "user_stats.json"
 
-# Список слоганов для ротации
+# Список слоганов и мудрых цитат для ротации
 SLOGANS = [
+    # Твои старые слоганы
     "💰 Цена имеет значение",
     "🎯 Поймай момент",
     "⚡️ Быстрее рынка",
@@ -80,6 +81,45 @@ SLOGANS = [
     "❄️ Зимние ставки",
     "🍺 Пятница, цены падают",
     "🎉 Выходные близко",
+    
+    # 🔥 Мудрые цитаты великих трейдеров
+    "🧠 Рынок переводит деньги от нетерпеливых к терпеливым — У. Баффет",
+    "🎯 Важно не быть правым, а сколько ты зарабатываешь когда прав — Дж. Сорос",
+    "🛡️ Лучшие трейдеры не самые умные, а самые дисциплинированные",
+    "⏳ Деньги делают, выжидая, а не торгуя — Д. Ливермор",
+    "📉 Позволять убыткам расти — самая серьезная ошибка — У. О'Нил",
+    "🧘 Учитесь принимать убытки — М. Шварц",
+    "🌊 Рынок — океан, волны эмоций бьются о скалы дисциплины",
+    "📊 Свечи на графике — истории жадности и страха",
+    "💃 Трейдинг — танец с хаосом",
+    "🎭 Рынок никогда не бывает очевиден — Д. Ливермор",
+    "🧪 Если вы не контролируете эмоции, вы не контролируете деньги — У. Баффет",
+    "🏦 Фондовый рынок заполнен людьми, знающими цену всему, но не ценность — Ф. Фишер",
+    "⏰ Время — друг, импульс — враг — Д. Богл",
+    "🔮 Лучшая формация — та, которую ты не торгуешь",
+    "⚖️ Риск возникает из незнания того, что вы делаете — У. Баффет",
+    "🎲 Торговля — игра вероятностей",
+    "📝 Планируй торговлю и торгуй по плану — М. Дуглас",
+    "🧗 Выживание — единственный путь к богатству — П. Бернстайн",
+    "🐑 Люди сходят с ума толпой, а приходят в себя поодиночке — Ч. Маккей",
+    "⚠️ «На этот раз всё по-другому» — самые опасные слова — Д. Темплтон",
+    "📈 Бычий рынок рождается на пессимизме, умирает на эйфории — Д. Темплтон",
+    "🤔 Если не знаешь себя, рынок — дорогое место чтобы это выяснить — А. Смит",
+    "💰 Бойся, когда другие жадны. Будь жадным, когда другие боятся — У. Баффет",
+    "🧠 Трейдинг раскрывает характер и формирует его — И. Бьеджи",
+    "🎪 Рынок одурачивает как можно больше людей — Б. Барух",
+    "📚 Учитесь на чужих ошибках — на своих учиться слишком долго",
+    "🔁 Что было, то будет — рынки повторяются — Д. Ливермор",
+    "🧘‍♂️ Не пытайся вести рынок — учись чувствовать его импульс",
+    "📉 Прибыль — это правильное действие в правильном месте — Дж. Сорос",
+    "🧠 Интуиция трейдера — это сжатый опыт",
+    "💪 Сила воли — капитал, самодисциплина — процентная ставка",
+    "🎯 Вход — искусство, выход — талант",
+    "📊 Рынок — тест на эмоциональную зрелость",
+    "🧘 Терпение — не просто ожидание, а сохранение фокуса",
+    "📈 Тренд — твой друг до последнего",
+    "🛑 Стоп-лосс — ремень безопасности трейдера",
+    "🚀 Удача улыбается тем, кто готов к ее улыбке",
 ]
 
 def load_user_alerts():
@@ -256,6 +296,7 @@ class CurrencyMonitor:
             'USD/JPY': 155.0,
             'USD/RUB': 90.0,
             'EUR/GBP': 0.87,
+            'USD/CNY': 7.25,  # Китайский юань
             
             # Металлы
             'XAU/USD': 5160.0,
@@ -502,7 +543,6 @@ class CurrencyMonitor:
             async with session.get(url_spy, timeout=5) as response:
                 if response.status == 200:
                     html = await response.text()
-                    # Ищем цену в HTML (паттерн: $XXX.XX или $X,XXX.XX)
                     price_match = re.search(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', html)
                     if price_match:
                         price_str = price_match.group(1).replace(',', '')
@@ -535,7 +575,6 @@ class CurrencyMonitor:
                 'x-rapidapi-key': 'demo'
             }
             
-            # S&P 500 через SPY
             url_spy = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=SPY:NASDAQ"
             async with session.get(url_spy, headers=headers, timeout=5) as response:
                 if response.status == 200:
@@ -543,7 +582,6 @@ class CurrencyMonitor:
                     if 'data' in data and 'price' in data['data']:
                         result['S&P 500'] = float(data['data']['price'])
             
-            # NASDAQ через QQQ
             url_qqq = "https://real-time-finance-data.p.rapidapi.com/stock-quote?symbol=QQQ:NASDAQ"
             async with session.get(url_qqq, headers=headers, timeout=5) as response:
                 if response.status == 200:
@@ -559,7 +597,6 @@ class CurrencyMonitor:
         except Exception as e:
             logger.warning(f"RapidAPI error: {e}")
         
-        # Если все источники упали, возвращаем кэш
         logger.warning("⚠️ Все источники индексов недоступны, использую кэш")
         return self.cached_indices if self.cached_indices else {
             'S&P 500': self.last_successful_rates.get('S&P 500', 5100.0),
@@ -570,7 +607,6 @@ class CurrencyMonitor:
         """Получает цену кукурузы через Twelve Data"""
         try:
             session = await self.get_session()
-            
             url = f"https://api.twelvedata.com/quote?symbol=ZC&apikey={TWELVEDATA_KEY}"
             
             async with session.get(url, timeout=10) as response:
@@ -609,6 +645,8 @@ class CurrencyMonitor:
                         result['GBP/USD'] = 1.0 / rates['GBP']
                     if 'JPY' in rates:
                         result['USD/JPY'] = rates['JPY']
+                    if 'CNY' in rates:
+                        result['USD/CNY'] = 1.0 / rates['CNY']
                     
                     if 'EUR' in rates and 'GBP' in rates:
                         eur_usd = 1.0 / rates['EUR']
@@ -623,7 +661,8 @@ class CurrencyMonitor:
                 'GBP/USD': self.last_successful_rates.get('GBP/USD', 1.26),
                 'USD/JPY': self.last_successful_rates.get('USD/JPY', 155.0),
                 'USD/RUB': self.last_successful_rates.get('USD/RUB', 90.0),
-                'EUR/GBP': self.last_successful_rates.get('EUR/GBP', 0.87)
+                'EUR/GBP': self.last_successful_rates.get('EUR/GBP', 0.87),
+                'USD/CNY': self.last_successful_rates.get('USD/CNY', 7.25)
             }
     
     async def fetch_rates(self):
@@ -698,7 +737,6 @@ class CurrencyMonitor:
         """Показывает меню выбора часового пояса"""
         keyboard = {"inline_keyboard": []}
         
-        # Группируем пояса по 2 в ряд для компактности
         tz_list = list(TIMEZONES.items())
         for i in range(0, len(tz_list), 2):
             row = []
@@ -718,7 +756,6 @@ class CurrencyMonitor:
     async def set_user_timezone(self, chat_id, tz_key):
         """Устанавливает часовой пояс пользователя"""
         if tz_key in TIMEZONES:
-            # Обновляем статистику с новым часовым поясом
             stats = load_user_stats()
             user_id = str(chat_id)
             if user_id in stats:
@@ -731,7 +768,6 @@ class CurrencyMonitor:
                 f"✅ Часовой пояс установлен: {TIMEZONES[tz_key]['name']}\n\n"
                 f"Теперь все уведомления будут приходить с твоим местным временем."
             )
-            # После установки пояса возвращаем в главное меню
             await self.show_main_menu(chat_id)
         else:
             await self.send_telegram_message(chat_id, "❌ Ошибка: часовой пояс не найден")
@@ -748,14 +784,11 @@ class CurrencyMonitor:
         user_id = str(chat_id)
         pinned_pairs = get_user_pinned_pairs(user_id)
         
-        # Создаем клавиатуру
         keyboard = {"inline_keyboard": []}
-        
-        # Добавляем все пары по одной на строку
         all_pairs = sorted(rates.keys())
+        
         for pair in all_pairs:
-            # Определяем эмодзи для пары
-            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']:
+            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CNY']:
                 emoji = "💶"
             elif pair in ['XAU/USD', 'XAG/USD']:
                 emoji = "🏅"
@@ -774,16 +807,13 @@ class CurrencyMonitor:
             else:
                 emoji = "🪙"
             
-            # Если пара уже закреплена, добавляем 📌
             pin_mark = " 📌" if pair in pinned_pairs else ""
             text = f"{emoji} {pair}{pin_mark}"
             
-            # При клике на пару сразу закрепляем/открепляем
             keyboard["inline_keyboard"].append([
                 {"text": text, "callback_data": f"pin_toggle_{pair}"}
             ])
         
-        # Кнопка "Назад"
         keyboard["inline_keyboard"].append([
             {"text": "◀️ Назад", "callback_data": "main_menu"}
         ])
@@ -848,32 +878,26 @@ class CurrencyMonitor:
         user_id = str(chat_id)
         user_alerts_list = user_alerts.get(user_id, [])
         
-        # Находим ВСЕ активные алерты для этой пары
         active_alerts = [alert for alert in user_alerts_list 
                          if alert.get('pair') == pair and alert.get('active')]
         
         if active_alerts:
-            # Формируем список алертов
             alerts_text = ""
             for i, alert in enumerate(active_alerts, 1):
                 alerts_text += f"{i}. 🎯 {alert['target']}\n"
             
-            # Создаем клавиатуру с кнопками для каждого алерта
             keyboard = {"inline_keyboard": []}
             
-            # Добавляем кнопку для каждого алерта (только цена)
             for i, alert in enumerate(active_alerts, 1):
                 keyboard["inline_keyboard"].append([
                     {"text": f"❌ {alert['target']}", 
                      "callback_data": f"delete_specific_{pair}_{i}"}
                 ])
             
-            # Кнопка для добавления новой цели
             keyboard["inline_keyboard"].append([
                 {"text": "➕ Добавить цель", "callback_data": f"add_{pair}"}
             ])
             
-            # Кнопка назад
             keyboard["inline_keyboard"].append([
                 {"text": "◀️ Назад", "callback_data": "main_menu"}
             ])
@@ -886,7 +910,6 @@ class CurrencyMonitor:
                 keyboard
             )
         else:
-            # Нет алертов - запускаем создание
             self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
             
             cancel_keyboard = {
@@ -906,7 +929,6 @@ class CurrencyMonitor:
         """Главное меню со слоганом и тремя кнопками внизу (закрепленные пары внизу)"""
         rates = await self.fetch_rates()
         if not rates:
-            # Если не удалось получить курсы, показываем упрощенное меню
             keyboard = {
                 "inline_keyboard": [
                     [{"text": "📩 Обратная связь", "callback_data": "collaboration"}],
@@ -918,12 +940,10 @@ class CurrencyMonitor:
             await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
             return
         
-        # Получаем алерты пользователя и закрепленные пары
         user_id = str(chat_id)
         user_alerts_list = user_alerts.get(user_id, [])
         pinned_pairs = get_user_pinned_pairs(user_id)
         
-        # Функция для получения индикатора количества алертов
         def get_alert_indicator(count):
             if count == 0:
                 return ""
@@ -940,11 +960,10 @@ class CurrencyMonitor:
             else:
                 return f" {count}️⃣"
         
-        # Собираем все доступные пары с их данными
         all_pairs = []
         
-        # Валюты
-        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP']
+        # Валюты (с USD/CNY)
+        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CNY']
         for pair in currency_pairs:
             if pair in rates:
                 rate = rates[pair]
@@ -1025,18 +1044,14 @@ class CurrencyMonitor:
                 'is_pinned': pair in pinned_pairs
             })
         
-        # Разделяем на закрепленные и обычные
         pinned_items = [p for p in all_pairs if p['is_pinned']]
         regular_items = [p for p in all_pairs if not p['is_pinned']]
         
-        # Сортируем каждый список по алфавиту
         pinned_items.sort(key=lambda x: x['pair'])
         regular_items.sort(key=lambda x: x['pair'])
         
-        # Объединяем: сначала обычные, потом закрепленные (то есть закрепленные ВНИЗУ)
         sorted_pairs = regular_items + pinned_items
         
-        # Формируем одноколоночную клавиатуру
         keyboard = {"inline_keyboard": []}
         
         for item in sorted_pairs:
@@ -1046,17 +1061,14 @@ class CurrencyMonitor:
                 {"text": text, "callback_data": f"manage_{pair}"}
             ])
         
-        # Три кнопки внизу
         keyboard["inline_keyboard"].append([
             {"text": "📩 Обратная связь", "callback_data": "collaboration"},
             {"text": "🌍 Часовой пояс", "callback_data": "show_timezone"},
             {"text": "📌 Закрепить", "callback_data": "show_pin_menu"}
         ])
         
-        # Получаем слоган для пользователя (обновляется раз в 24 часа)
         slogan = get_user_slogan(chat_id)
         
-        # Отправляем сообщение со слоганом
         await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
     
     async def handle_alert_input(self, chat_id, text):
@@ -1098,19 +1110,16 @@ class CurrencyMonitor:
             
             del self.alert_states[str(chat_id)]
             
-            # Подтверждение создания алерта
             await self.send_telegram_message(
                 chat_id,
                 f"✅ Алерт для {pair} создан!\n\n"
                 f"🎯 Цель: {target}"
             )
             
-            # Возвращаем в главное меню
             await self.show_main_menu(chat_id)
             
         except ValueError:
             await self.send_telegram_message(chat_id, "❌ Это не число! Введи цену (например: 1.10)")
-            # Оставляем состояние активным, даём ещё попытку
         except Exception as e:
             logger.error(f"Error in alert input: {e}")
             await self.send_telegram_message(chat_id, "❌ Ошибка при создании алерта")
@@ -1152,21 +1161,15 @@ class CurrencyMonitor:
             first_name = msg['chat'].get('first_name', '')
             last_name = msg['chat'].get('last_name', '')
             
-            # Обновляем статистику
             update_user_stats(chat_id, username, first_name, last_name)
             
             if not self.is_user_allowed(chat_id):
                 logger.info(f"⛔ Запрещен: {chat_id}")
                 return
             
-            # Для /start и /menu всегда показываем свежее меню
             if text in ['/start', '/menu']:
-                # Очищаем состояние, если оно было
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
-                    logger.info(f"Очищено состояние для {chat_id}")
-                
-                # Показываем меню
                 await self.show_main_menu(chat_id)
                 return
             
@@ -1186,7 +1189,6 @@ class CurrencyMonitor:
                 await self.handle_alert_input(chat_id, text)
                 return
             
-            # Если ничего не подошло - показываем меню
             await self.show_main_menu(chat_id)
             
         except Exception as e:
@@ -1235,63 +1237,50 @@ class CurrencyMonitor:
                 pinned_pairs = stats[user_id].get('pinned_pairs', [])
                 
                 if pair in pinned_pairs:
-                    # Открепляем
                     pinned_pairs = [p for p in pinned_pairs if p != pair]
                 else:
-                    # Закрепляем
                     pinned_pairs.append(pair)
                 
-                # Обновляем статистику
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
-                # Возвращаемся в меню закрепления (без уведомлений)
                 await self.show_pin_menu(chat_id)
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
             elif data.startswith("delete_specific_"):
-                # Формат: delete_specific_EUR/USD_1
                 try:
-                    # Разбираем строку
                     parts = data.replace("delete_specific_", "").rsplit("_", 1)
                     pair = parts[0]
                     alert_num = int(parts[1]) - 1
                     
                     user_id = str(chat_id)
                     if user_id in user_alerts:
-                        # Находим все алерты для этой пары
                         pair_alerts = [alert for alert in user_alerts[user_id] 
                                        if alert.get('pair') == pair and alert.get('active')]
                         
                         if 0 <= alert_num < len(pair_alerts):
-                            # Находим конкретный алерт в общем списке
                             target_alert = pair_alerts[alert_num]
-                            # Удаляем его
                             user_alerts[user_id] = [a for a in user_alerts[user_id] 
                                                      if not (a.get('pair') == pair and 
                                                             a.get('target') == target_alert['target'] and 
                                                             a.get('active'))]
                             save_user_alerts(user_alerts)
                             
-                            # Проверяем, остались ли еще алерты для этой пары
                             remaining_alerts = [a for a in user_alerts[user_id] 
                                                if a.get('pair') == pair and a.get('active')]
                             
                             if not remaining_alerts:
-                                # Если алертов не осталось, показываем сообщение и открываем меню создания
                                 await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
                                 await self.handle_pair_management(chat_id, pair)
                                 return
                 except Exception as e:
                     logger.error(f"Delete specific error: {e}")
                 
-                # Если остались алерты, возвращаемся к управлению
                 await self.handle_pair_management(chat_id, pair)
             elif data.startswith("delete_all_"):
                 pair = data.replace("delete_all_", "")
                 user_id = str(chat_id)
                 if user_id in user_alerts:
-                    # Удаляем все алерты для этой пары
                     old_count = len([a for a in user_alerts[user_id] 
                                      if a.get('pair') == pair and a.get('active')])
                     user_alerts[user_id] = [a for a in user_alerts[user_id] 
@@ -1299,13 +1288,11 @@ class CurrencyMonitor:
                     save_user_alerts(user_alerts)
                     logger.info(f"Удалено {old_count} алертов для {pair} у пользователя {user_id}")
                     
-                    # Показываем сообщение и открываем меню создания
                     await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
                     await self.handle_pair_management(chat_id, pair)
                     return
             elif data.startswith("add_"):
                 pair = data.replace("add_", "")
-                # Запускаем процесс добавления новой цели
                 self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
                 cancel_keyboard = {
                     "inline_keyboard": [
@@ -1325,7 +1312,6 @@ class CurrencyMonitor:
                     "✉️ Напиши @Maranafa2023 — добавим!\n\n"
                     "Спасибо, что пользуетесь ботом! 🚀"
                 )
-                # Добавляем кнопку "Назад"
                 back_keyboard = {
                     "inline_keyboard": [
                         [{"text": "◀️ Назад", "callback_data": "main_menu"}]
@@ -1338,7 +1324,6 @@ class CurrencyMonitor:
                 await self.send_telegram_message(chat_id, "❌ Создание отменено")
                 await self.show_main_menu(chat_id)
             elif data.startswith("delete_"):
-                # Старый формат удаления - для обратной совместимости
                 try:
                     num = int(data.replace("delete_", "")) - 1
                     user_id = str(chat_id)
@@ -1353,7 +1338,6 @@ class CurrencyMonitor:
                     
         except Exception as e:
             logger.error(f"Callback error: {e}")
-            # В случае ошибки возвращаем в главное меню
             await self.show_main_menu(chat_id)
     
     async def get_updates(self):
@@ -1382,7 +1366,6 @@ class CurrencyMonitor:
         now_utc = datetime.now(ZoneInfo('UTC'))
         
         for user_id, alerts in user_alerts.items():
-            # Получаем часовой пояс пользователя (по умолчанию Москва)
             user_tz = stats.get(str(user_id), {}).get('timezone', 'Europe/Moscow')
             tz_info = TIMEZONES.get(user_tz, TIMEZONES['Europe/Moscow'])
             user_time = now_utc.astimezone(ZoneInfo(user_tz))
@@ -1507,10 +1490,10 @@ class CurrencyMonitor:
         mode = "ОТКРЫТЫЙ" if not PRIVATE_MODE else "ПРИВАТНЫЙ"
         logger.info(f"🚀 ЗАПУСК БОТА [{mode} РЕЖИМ]")
         logger.info(f"⚡️ Проверка: каждые 10 секунд")
-        logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары")
+        logger.info(f"📊 Пары: фиат + металлы + крипта + индексы + товары + юань")
         logger.info(f"🎯 Точность: максимальная")
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
-        logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
+        logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя (50+ вариантов)")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы: yfinance доступен")
