@@ -7,6 +7,7 @@ import json
 import sys
 import re
 import random
+import yfinance as yf
 from dotenv import load_dotenv
 from aiohttp import web
 from zoneinfo import ZoneInfo
@@ -376,58 +377,34 @@ class CurrencyMonitor:
                 logger.info("📊 Индексы из кэша (обновление раз в минуту)")
                 return self.cached_indices
         
-        # Источник 1: Twelve Data (основной)
+        # Источник 1: yfinance (самый надежный, не требует ключей)
         try:
-            session = await self.get_session()
-            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
-            async with session.get(url, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'SPY' in data and 'close' in data['SPY']:
-                        result['S&P 500'] = float(data['SPY']['close'])
-                    if 'QQQ' in data and 'close' in data['QQQ']:
-                        result['NASDAQ'] = float(data['QQQ']['close'])
-                    if result:
-                        logger.info("✅ Индексы от Twelve Data")
-                        self.cached_indices = result
-                        self.last_indices_update = now
-                        return result
-                    else:
-                        logger.warning(f"Twelve Data вернул пустые данные")
-                else:
-                    logger.warning(f"Twelve Data вернул статус {response.status}")
-        except Exception as e:
-            logger.warning(f"Twelve Data error: {e}")
-        
-        # Источник 2: Alpha Vantage (бесплатный демо-ключ)
-        try:
-            session = await self.get_session()
+            # Получаем данные для SPY и QQQ
+            spy = yf.Ticker("SPY")
+            qqq = yf.Ticker("QQQ")
             
-            # S&P 500
-            url_spy = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=SPY&apikey=demo"
-            async with session.get(url_spy, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
-                        result['S&P 500'] = float(data['Global Quote']['05. price'])
+            spy_info = spy.info
+            qqq_info = qqq.info
             
-            # NASDAQ
-            url_qqq = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=QQQ&apikey=demo"
-            async with session.get(url_qqq, timeout=5) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
-                        result['NASDAQ'] = float(data['Global Quote']['05. price'])
+            if 'regularMarketPrice' in spy_info:
+                result['S&P 500'] = float(spy_info['regularMarketPrice'])
+            elif 'currentPrice' in spy_info:
+                result['S&P 500'] = float(spy_info['currentPrice'])
+            
+            if 'regularMarketPrice' in qqq_info:
+                result['NASDAQ'] = float(qqq_info['regularMarketPrice'])
+            elif 'currentPrice' in qqq_info:
+                result['NASDAQ'] = float(qqq_info['currentPrice'])
             
             if result:
-                logger.info("✅ Индексы от Alpha Vantage")
+                logger.info("✅ Индексы от yfinance")
                 self.cached_indices = result
                 self.last_indices_update = now
                 return result
         except Exception as e:
-            logger.warning(f"Alpha Vantage error: {e}")
+            logger.warning(f"yfinance error: {e}")
         
-        # Источник 3: Yahoo Finance через yfinance-style endpoint
+        # Источник 2: Yahoo Finance API (если yfinance не сработал)
         try:
             session = await self.get_session()
             
@@ -457,7 +434,58 @@ class CurrencyMonitor:
         except Exception as e:
             logger.warning(f"Yahoo Finance error: {e}")
         
-        # Источник 4: Парсинг MarketBeat/Zacks (без API ключей)
+        # Источник 3: Twelve Data (основной API)
+        try:
+            session = await self.get_session()
+            url = f"https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey={TWELVEDATA_KEY}"
+            async with session.get(url, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'SPY' in data and 'close' in data['SPY']:
+                        result['S&P 500'] = float(data['SPY']['close'])
+                    if 'QQQ' in data and 'close' in data['QQQ']:
+                        result['NASDAQ'] = float(data['QQQ']['close'])
+                    if result:
+                        logger.info("✅ Индексы от Twelve Data")
+                        self.cached_indices = result
+                        self.last_indices_update = now
+                        return result
+                    else:
+                        logger.warning(f"Twelve Data вернул пустые данные")
+                else:
+                    logger.warning(f"Twelve Data вернул статус {response.status}")
+        except Exception as e:
+            logger.warning(f"Twelve Data error: {e}")
+        
+        # Источник 4: Alpha Vantage (бесплатный демо-ключ)
+        try:
+            session = await self.get_session()
+            
+            # S&P 500
+            url_spy = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=SPY&apikey=demo"
+            async with session.get(url_spy, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
+                        result['S&P 500'] = float(data['Global Quote']['05. price'])
+            
+            # NASDAQ
+            url_qqq = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=QQQ&apikey=demo"
+            async with session.get(url_qqq, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if 'Global Quote' in data and '05. price' in data['Global Quote']:
+                        result['NASDAQ'] = float(data['Global Quote']['05. price'])
+            
+            if result:
+                logger.info("✅ Индексы от Alpha Vantage")
+                self.cached_indices = result
+                self.last_indices_update = now
+                return result
+        except Exception as e:
+            logger.warning(f"Alpha Vantage error: {e}")
+        
+        # Источник 5: Парсинг MarketBeat/Zacks (без API ключей)
         try:
             session = await self.get_session()
             
@@ -490,13 +518,13 @@ class CurrencyMonitor:
         except Exception as e:
             logger.warning(f"MarketBeat/Zacks error: {e}")
         
-        # Источник 5: RapidAPI Real-Time Finance (демо-ключ)
+        # Источник 6: RapidAPI Real-Time Finance (демо-ключ)
         try:
             session = await self.get_session()
             
             headers = {
                 'x-rapidapi-host': 'real-time-finance-data.p.rapidapi.com',
-                'x-rapidapi-key': 'demo'  # демо-ключ может работать
+                'x-rapidapi-key': 'demo'
             }
             
             # S&P 500 через SPY
@@ -1476,7 +1504,7 @@ class CurrencyMonitor:
         logger.info(f"🌍 Поддержка часовых поясов: {len(TIMEZONES)} городов")
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя")
         logger.info(f"📌 Закрепленные пары внизу списка (без уведомлений)")
-        logger.info(f"📈 Индексы из 5 источников с кэшированием (включая парсинг HTML)")
+        logger.info(f"📈 Индексы из 6 источников с yfinance в приоритете")
         
         app = web.Application()
         app.router.add_get('/health', self.health_check)
