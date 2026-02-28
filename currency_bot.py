@@ -1447,13 +1447,11 @@ class CurrencyMonitor:
                     "✉️ Напиши @Maranafa2023 — добавим!\n\n"
                     "Спасибо, что пользуетесь ботом! 🚀"
                 )
-                back_keyboard = {
-                    "inline_keyboard": [
-                        [{"text": "◀️ Назад", "callback_data": "main_menu"}]
-                    ]
-                }
-                await self.send_telegram_message_with_keyboard(chat_id, collab_text, back_keyboard)
-            elif data == "cancel_alert":
+                
+                # Сначала отправляем сообщение
+                await self.send_telegram_message(chat_id, collab_text)
+                # И сразу показываем главное меню
+                await self.show_main_menu(chat_id)            elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.send_telegram_message(chat_id, "❌ Создание отменено")
