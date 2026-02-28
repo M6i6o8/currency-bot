@@ -684,14 +684,23 @@ class CurrencyMonitor:
             logger.error(f"Error sending keyboard: {e}")
     
     async def show_timezone_menu(self, chat_id):
-        """Показывает меню выбора часового пояса"""
+        """Показывает меню выбора часового пояса с отметкой текущего"""
+        user_id = str(chat_id)
+        stats = load_user_stats()
+        current_tz = stats.get(user_id, {}).get('timezone', 'Europe/Moscow')
+        
         keyboard = {"inline_keyboard": []}
         
         tz_list = list(TIMEZONES.items())
         for i in range(0, len(tz_list), 2):
             row = []
             for tz_key, tz_info in tz_list[i:i+2]:
-                row.append({"text": tz_info['name'], "callback_data": f"tz_{tz_key}"})
+                # Добавляем галочку если это текущий часовой пояс
+                check_mark = " ✅" if tz_key == current_tz else ""
+                row.append({
+                    "text": f"{tz_info['name']}{check_mark}", 
+                    "callback_data": f"tz_{tz_key}"
+                })
             keyboard["inline_keyboard"].append(row)
         
         keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
@@ -699,6 +708,7 @@ class CurrencyMonitor:
         await self.send_telegram_message_with_keyboard(
             chat_id,
             "🌍 <b>Выбери свой часовой пояс:</b>\n\n"
+            "✅ — текущий выбранный пояс\n"
             "От этого зависит время в уведомлениях. Можно изменить в любой момент.",
             keyboard
         )
