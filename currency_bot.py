@@ -1451,7 +1451,9 @@ class CurrencyMonitor:
                 # Сначала отправляем сообщение
                 await self.send_telegram_message(chat_id, collab_text)
                 # И сразу показываем главное меню
-                await self.show_main_menu(chat_id)            elif data == "cancel_alert":
+                await self.show_main_menu(chat_id) 
+                
+            elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.send_telegram_message(chat_id, "❌ Создание отменено")
