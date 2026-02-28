@@ -683,7 +683,7 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Error sending keyboard: {e}")
     
-    async def show_timezone_menu(self, chat_id):
+        async def show_timezone_menu(self, chat_id):async def show_timezone_menu(self, chat_id):
         """Показывает меню выбора часового пояса с отметкой текущего"""
         user_id = str(chat_id)
         stats = load_user_stats()
@@ -708,7 +708,6 @@ class CurrencyMonitor:
         await self.send_telegram_message_with_keyboard(
             chat_id,
             "🌍 <b>Выбери свой часовой пояс:</b>\n\n"
-            "✅ — текущий выбранный пояс\n"
             "От этого зависит время в уведомлениях. Можно изменить в любой момент.",
             keyboard
         )
