@@ -724,7 +724,7 @@ class CurrencyMonitor:
             await self.show_main_menu(chat_id)
     
     async def show_pin_menu(self, chat_id):
-        """Показывает меню для управления закреплёнными парами (клик = закрепить/открепить)"""
+        """Показывает меню для управления закреплёнными парами в два ряда"""
         rates = await self.fetch_rates()
         if not rates:
             await self.send_telegram_message(chat_id, "❌ Не удалось получить список пар")
@@ -734,38 +734,130 @@ class CurrencyMonitor:
         user_id = str(chat_id)
         pinned_pairs = get_user_pinned_pairs(user_id)
         
+        # Собираем все пары с их данными
+        all_pairs = []
+        
+        # Валюты (9 пар)
+        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']
+        for pair in currency_pairs:
+            if pair in rates:
+                # Эмодзи для валют
+                if pair == 'EUR/USD':
+                    emoji = "🇪🇺"
+                elif pair == 'GBP/USD':
+                    emoji = "🇬🇧"
+                elif pair == 'USD/JPY':
+                    emoji = "🇯🇵"
+                elif pair == 'USD/RUB':
+                    emoji = "🇷🇺"
+                elif pair == 'EUR/GBP':
+                    emoji = "🇪🇺🇬🇧"
+                elif pair == 'USD/CAD':
+                    emoji = "🇨🇦"
+                elif pair == 'AUD/USD':
+                    emoji = "🇦🇺"
+                elif pair == 'USD/CHF':
+                    emoji = "🇨🇭"
+                elif pair == 'USD/CNY':
+                    emoji = "🇨🇳"
+                else:
+                    emoji = "💶"
+                
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Металлы (3 пары)
+        metals = ['XAU/USD', 'XAG/USD', 'XPT/USD']
+        metal_emojis = {'XAU/USD': '🥇', 'XAG/USD': '🥈', 'XPT/USD': '🥉'}
+        for pair in metals:
+            if pair in rates:
+                emoji = metal_emojis.get(pair, '🏅')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Крипта (5 пар)
+        crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD']
+        crypto_emojis = {
+            'BTC/USD': '₿', 
+            'ETH/USD': 'Ξ', 
+            'SOL/USD': '◎', 
+            'XRP/USD': '✪', 
+            'DOGE/USD': '🐕'
+        }
+        for pair in crypto_pairs:
+            if pair in rates:
+                emoji = crypto_emojis.get(pair, '🪙')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Индексы (2 пары)
+        indices = ['S&P 500', 'NASDAQ']
+        index_emojis = {'S&P 500': '📈', 'NASDAQ': '📊'}
+        for pair in indices:
+            if pair in rates:
+                emoji = index_emojis.get(pair, '📉')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Товары (3 пары)
+        commodities = ['CORN/USD', 'WTI/USD', 'BRENT/USD']
+        commodity_emojis = {'CORN/USD': '🌽', 'WTI/USD': '🛢️', 'BRENT/USD': '🛢️'}
+        for pair in commodities:
+            if pair in rates:
+                emoji = commodity_emojis.get(pair, '📦')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Сортируем по названию
+        all_pairs.sort(key=lambda x: x['pair'])
+        
+        # Создаем клавиатуру с двумя колонками
         keyboard = {"inline_keyboard": []}
-        all_pairs = sorted(rates.keys())
         
-        for pair in all_pairs:
-            if pair in ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']:
-                emoji = "💶"
-            elif pair in ['XAU/USD', 'XAG/USD', 'XPT/USD']:
-                emoji = "🏅"
-            elif pair in ['BTC/USD', 'ETH/USD']:
-                emoji = "₿"
-            elif pair == 'SOL/USD':
-                emoji = "🟪"
-            elif pair in ['XRP/USD', 'DOGE/USD']:
-                emoji = "⚡️"
-            elif pair == 'S&P 500':
-                emoji = "📈"
-            elif pair == 'NASDAQ':
-                emoji = "📊"
-            elif pair == 'CORN/USD':
-                emoji = "🌽"
-            elif pair in ['WTI/USD', 'BRENT/USD']:
-                emoji = "🛢️"
-            else:
-                emoji = "🪙"
+        # Разбиваем на ряды по 2 кнопки
+        for i in range(0, len(all_pairs), 2):
+            row = []
+            # Первая кнопка в ряду
+            row.append({
+                "text": all_pairs[i]['text'], 
+                "callback_data": f"pin_toggle_{all_pairs[i]['pair']}"
+            })
             
-            pin_mark = " 📌" if pair in pinned_pairs else ""
-            text = f"{emoji} {pair}{pin_mark}"
+            # Вторая кнопка в ряду (если есть)
+            if i + 1 < len(all_pairs):
+                row.append({
+                    "text": all_pairs[i + 1]['text'], 
+                    "callback_data": f"pin_toggle_{all_pairs[i + 1]['pair']}"
+                })
             
-            keyboard["inline_keyboard"].append([
-                {"text": text, "callback_data": f"pin_toggle_{pair}"}
-            ])
+            keyboard["inline_keyboard"].append(row)
         
+        # Добавляем кнопку "Назад"
         keyboard["inline_keyboard"].append([
             {"text": "◀️ Назад", "callback_data": "main_menu"}
         ])
@@ -1532,6 +1624,7 @@ class CurrencyMonitor:
         logger.info(f"🔢 Для 10+ алертов используются составные эмодзи-цифры")
         logger.info(f"💰 При создании алерта показывается текущая цена")
         logger.info(f"📱 Главное меню: без цен, в два ряда, с флагами и эмодзи")
+        logger.info(f"📌 Меню закрепления: в два ряда, с флагами и эмодзи")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
