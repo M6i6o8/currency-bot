@@ -345,6 +345,11 @@ class CurrencyMonitor:
         # Для кэширования индексов
         self.last_indices_update = None
         self.cached_indices = None
+        
+        # Списки для форматирования цен
+        self.currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']
+        self.high_value_pairs = ['BTC/USD', 'ETH/USD', 'XAU/USD', 'XPT/USD', 'S&P 500', 'NASDAQ']
+        self.low_value_pairs = ['DOGE/USD', 'XRP/USD']
     
     def is_user_allowed(self, chat_id):
         if not PRIVATE_MODE:
@@ -820,6 +825,20 @@ class CurrencyMonitor:
         await self.send_telegram_message(chat_id, msg)
         await self.show_main_menu(chat_id)
     
+    def format_price(self, pair, price):
+        """Форматирует цену в зависимости от пары"""
+        if price == 'неизвестно':
+            return 'неизвестно'
+        
+        if pair in self.high_value_pairs:
+            return f"${price:,.2f}"
+        elif pair in self.low_value_pairs:
+            return f"${price:.4f}"
+        elif pair in self.currency_pairs:
+            return f"{price:.4f}"
+        else:
+            return f"${price:.2f}"
+    
     async def handle_pair_management(self, chat_id, pair):
         """Показывает меню управления для конкретной пары"""
         user_id = str(chat_id)
@@ -857,6 +876,11 @@ class CurrencyMonitor:
                 keyboard
             )
         else:
+            # Получаем текущую цену для отображения при создании
+            rates = await self.fetch_rates()
+            current_price = rates.get(pair, 'неизвестно')
+            price_str = self.format_price(pair, current_price)
+            
             self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
             
             cancel_keyboard = {
@@ -867,7 +891,8 @@ class CurrencyMonitor:
             
             await self.send_telegram_message_with_keyboard(
                 chat_id,
-                f"Создать алерт для {pair}\n\n"
+                f"Создать алерт для {pair}\n"
+                f"💰 Текущая цена: {price_str}\n\n"
                 f"📝 Введи целевую цену:",
                 cancel_keyboard
             )
@@ -1244,6 +1269,12 @@ class CurrencyMonitor:
                     return
             elif data.startswith("add_"):
                 pair = data.replace("add_", "")
+                
+                # Получаем текущую цену для отображения при создании
+                rates = await self.fetch_rates()
+                current_price = rates.get(pair, 'неизвестно')
+                price_str = self.format_price(pair, current_price)
+                
                 self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
                 cancel_keyboard = {
                     "inline_keyboard": [
@@ -1252,7 +1283,8 @@ class CurrencyMonitor:
                 }
                 await self.send_telegram_message_with_keyboard(
                     chat_id,
-                    f"Создать алерт для {pair}\n\n"
+                    f"Создать алерт для {pair}\n"
+                    f"💰 Текущая цена: {price_str}\n\n"
                     f"📝 Введи целевую цену:",
                     cancel_keyboard
                 )
@@ -1447,6 +1479,7 @@ class CurrencyMonitor:
         logger.info(f"🔄 Слоганы меняются раз в 24 часа для каждого пользователя (50+ вариантов)")
         logger.info(f"📌 Закрепленные пары отмечены 📌 в главном меню")
         logger.info(f"🔢 Для 10+ алертов используются составные эмодзи-цифры")
+        logger.info(f"💰 При создании алерта показывается текущая цена")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
