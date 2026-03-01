@@ -1504,10 +1504,8 @@ class CurrencyMonitor:
                     chat_id, 
                     collab_text, 
                     ok_keyboard
-                )                            
-                await self.send_telegram_message(chat_id, collab_text)
-                await self.show_main_menu(chat_id)
-                
+                )            
+                            
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
