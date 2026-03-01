@@ -1493,6 +1493,18 @@ class CurrencyMonitor:
                     "✉️ Напиши @Maranafa2023 — добавим!\n\n"
                     "Спасибо, что пользуетесь ботом! 🚀"
                 )
+                
+                ok_keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "✅ ОК", "callback_data": "main_menu"}]
+                    ]
+                }
+                
+                await self.send_telegram_message_with_keyboard(
+                    chat_id, 
+                    collab_text, 
+                    ok_keyboard
+                )                            
                 await self.send_telegram_message(chat_id, collab_text)
                 await self.show_main_menu(chat_id)
                 
