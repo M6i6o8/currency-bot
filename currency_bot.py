@@ -1040,18 +1040,11 @@ class CurrencyMonitor:
             
             self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
             
-            cancel_keyboard = {
-                "inline_keyboard": [
-                    [{"text": "◀️ Отмена", "callback_data": "main_menu"}]
-                ]
-            }
-            
-            await self.send_telegram_message_with_keyboard(
+            await self.send_telegram_message(
                 chat_id,
                 f"Создать алерт для {pair}\n"
                 f"💰 Текущая цена: {price_str}\n\n"
-                f"📝 Введи целевую цену:",
-                cancel_keyboard
+                f"📝 Введи целевую цену:"
             )
     
     async def show_main_menu(self, chat_id):
@@ -1493,17 +1486,11 @@ class CurrencyMonitor:
                 price_str = self.format_price(pair, current_price)
                 
                 self.alert_states[str(chat_id)] = {'pair': pair, 'step': 'waiting_price'}
-                cancel_keyboard = {
-                    "inline_keyboard": [
-                        [{"text": "◀️ Отмена", "callback_data": f"manage_{pair}"}]
-                    ]
-                }
-                await self.send_telegram_message_with_keyboard(
+                await self.send_telegram_message(
                     chat_id,
                     f"Создать алерт для {pair}\n"
                     f"💰 Текущая цена: {price_str}\n\n"
-                    f"📝 Введи целевую цену:",
-                    cancel_keyboard
+                    f"📝 Введи целевую цену:"
                 )
                 
             elif data == "collaboration":
