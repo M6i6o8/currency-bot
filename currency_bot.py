@@ -788,7 +788,147 @@ class CurrencyMonitor:
             await self.send_telegram_message(chat_id, "❌ Ошибка: часовой пояс не найден")
             await self.show_main_menu(chat_id)
     
-	
+    async def show_pin_menu(self, chat_id):
+        """Показывает меню для управления закреплёнными парами в два ряда"""
+        rates = await self.fetch_rates()
+        if not rates:
+            await self.send_telegram_message(chat_id, "❌ Не удалось получить список пар")
+            await self.show_main_menu(chat_id)
+            return
+        
+        user_id = str(chat_id)
+        pinned_pairs = get_user_pinned_pairs(user_id)
+        
+        # Собираем все пары с их данными
+        all_pairs = []
+        
+        # Валюты (9 пар)
+        currency_pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/RUB', 'EUR/GBP', 'USD/CAD', 'AUD/USD', 'USD/CHF', 'USD/CNY']
+        for pair in currency_pairs:
+            if pair in rates:
+                # Эмодзи для валют
+                if pair == 'EUR/USD':
+                    emoji = "🇪🇺"
+                elif pair == 'GBP/USD':
+                    emoji = "🇬🇧"
+                elif pair == 'USD/JPY':
+                    emoji = "🇯🇵"
+                elif pair == 'USD/RUB':
+                    emoji = "🇷🇺"
+                elif pair == 'EUR/GBP':
+                    emoji = "🇪🇺🇬🇧"
+                elif pair == 'USD/CAD':
+                    emoji = "🇨🇦"
+                elif pair == 'AUD/USD':
+                    emoji = "🇦🇺"
+                elif pair == 'USD/CHF':
+                    emoji = "🇨🇭"
+                elif pair == 'USD/CNY':
+                    emoji = "🇨🇳"
+                else:
+                    emoji = "💶"
+                
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Металлы (3 пары)
+        metals = ['XAU/USD', 'XAG/USD', 'XPT/USD']
+        metal_emojis = {'XAU/USD': '🥇', 'XAG/USD': '🥈', 'XPT/USD': '🥉'}
+        for pair in metals:
+            if pair in rates:
+                emoji = metal_emojis.get(pair, '🏅')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Крипта (5 пар)
+        crypto_pairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD']
+        crypto_emojis = {
+            'BTC/USD': '₿', 
+            'ETH/USD': 'Ξ', 
+            'SOL/USD': '◎', 
+            'XRP/USD': '✪', 
+            'DOGE/USD': '🐕'
+        }
+        for pair in crypto_pairs:
+            if pair in rates:
+                emoji = crypto_emojis.get(pair, '🪙')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Индексы (2 пары)
+        indices = ['S&P 500', 'NASDAQ']
+        index_emojis = {'S&P 500': '📈', 'NASDAQ': '📊'}
+        for pair in indices:
+            if pair in rates:
+                emoji = index_emojis.get(pair, '📉')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Товары (3 пары)
+        commodities = ['CORN/USD', 'WTI/USD', 'BRENT/USD']
+        commodity_emojis = {'CORN/USD': '🌽', 'WTI/USD': '🛢️', 'BRENT/USD': '🛢️'}
+        for pair in commodities:
+            if pair in rates:
+                emoji = commodity_emojis.get(pair, '📦')
+                pin_mark = "📌" if pair in pinned_pairs else ""
+                text = f"{emoji} {pair} {pin_mark}"
+                all_pairs.append({
+                    'pair': pair,
+                    'text': text,
+                    'is_pinned': pair in pinned_pairs
+                })
+        
+        # Сортируем по названию
+        all_pairs.sort(key=lambda x: x['pair'])
+        
+        # Создаем клавиатуру с двумя колонками
+        keyboard = {"inline_keyboard": []}
+        
+        # Разбиваем на ряды по 2 кнопки
+        for i in range(0, len(all_pairs), 2):
+            row = []
+            # Первая кнопка в ряду
+            row.append({
+                "text": all_pairs[i]['text'], 
+                "callback_data": f"pin_toggle_{all_pairs[i]['pair']}"
+            })
+            
+            # Вторая кнопка в ряду (если есть)
+            if i + 1 < len(all_pairs):
+                row.append({
+                    "text": all_pairs[i + 1]['text'], 
+                    "callback_data": f"pin_toggle_{all_pairs[i + 1]['pair']}"
+                })
+            
+            keyboard["inline_keyboard"].append(row)
+        
+        # Отправляем сообщение без кнопки "Назад"
+        await self.send_telegram_message_with_keyboard(
+            chat_id,
+            f"📌 <b>Закрепление пар</b>\n\n👇 Нажми на пару, чтобы закрепить/открепить:",
+            keyboard
+        )
+    
     async def show_stats(self, chat_id):
         """Показывает статистику использования бота (только для админа)"""
         if not self.is_admin(chat_id):
@@ -1540,7 +1680,7 @@ class CurrencyMonitor:
         logger.info(f"🔢 Для 10+ алертов используются составные эмодзи-цифры")
         logger.info(f"💰 При создании алерта показывается текущая цена")
         logger.info(f"📱 Главное меню: без цен, в два ряда, с флагами и эмодзи")
-        logger.info(f"📌 Меню закрепления: в два ряда, с флагами и эмодзи")
+        logger.info(f"📌 Меню закрепления: в два ряда, с флагами и эмодзи (без кнопки назад)")
         logger.info(f"✅ В меню часовых поясов галочка у выбранного")
         logger.info(f"🌞❄️🌸🍂 Сезонные слоганы: лето, зима, весна, осень")
         if YFINANCE_AVAILABLE:
