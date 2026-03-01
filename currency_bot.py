@@ -1016,9 +1016,7 @@ class CurrencyMonitor:
                 {"text": "➕ Добавить цель", "callback_data": f"add_{pair}"}
             ])
             
-            keyboard["inline_keyboard"].append([
-                {"text": "◀️ Назад", "callback_data": "main_menu"}
-            ])
+            # Кнопка "Назад" УБРАНА!
             
             await self.send_telegram_message_with_keyboard(
                 chat_id,
@@ -1040,8 +1038,8 @@ class CurrencyMonitor:
                 f"Создать алерт для {pair}\n"
                 f"💰 Текущая цена: {price_str}\n\n"
                 f"📝 Введи целевую цену:"
-            ) 
-            
+            )
+        
     async def show_main_menu(self, chat_id):
         """Главное меню со слоганом, индикаторами алертов и закреплений"""
         rates = await self.fetch_rates()
