@@ -1003,7 +1003,7 @@ class CurrencyMonitor:
         if active_alerts:
             alerts_text = ""
             for i, alert in enumerate(active_alerts, 1):
-                alerts_text += f"{number_to_emoji(i)} 🎯 {alert['target']}\n"
+                alerts_text += f"{i}. 🎯 {alert['target']}\n"
             
             keyboard = {"inline_keyboard": []}
             
@@ -1024,7 +1024,7 @@ class CurrencyMonitor:
             await self.send_telegram_message_with_keyboard(
                 chat_id,
                 f"📊 {pair}\n\n"
-                f"Всего алертов: {len(active_alerts)} {number_to_emoji(len(active_alerts))}\n\n"
+                f"Всего алертов: {len(active_alerts)}\n\n"
                 f"{alerts_text}",
                 keyboard
             )
@@ -1041,8 +1041,8 @@ class CurrencyMonitor:
                 f"Создать алерт для {pair}\n"
                 f"💰 Текущая цена: {price_str}\n\n"
                 f"📝 Введи целевую цену:"
-            )
-    
+            ) 
+            
     async def show_main_menu(self, chat_id):
         """Главное меню со слоганом, индикаторами алертов и закреплений"""
         rates = await self.fetch_rates()
