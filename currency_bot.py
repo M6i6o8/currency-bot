@@ -759,15 +759,14 @@ class CurrencyMonitor:
                 })
             keyboard["inline_keyboard"].append(row)
         
-        keyboard["inline_keyboard"].append([{"text": "◀️ Назад", "callback_data": "main_menu"}])
-        
+        # Отправляем сообщение без кнопки "Назад"
         await self.send_telegram_message_with_keyboard(
             chat_id,
             "🌍 <b>Выбери свой часовой пояс:</b>\n\n"
             "От этого зависит время в уведомлениях. Можно изменить в любой момент.",
             keyboard
-        )
-    
+        )    
+        
     async def set_user_timezone(self, chat_id, tz_key):
         """Устанавливает часовой пояс пользователя"""
         if tz_key in TIMEZONES:
