@@ -1004,7 +1004,7 @@ class CurrencyMonitor:
         if not rates:
             keyboard = {
                 "inline_keyboard": [
-                    [{"text": "📩 Обратная связь", "callback_data": "collaboration"}],
+                    [{"text": "📩 Связь", "callback_data": "collaboration"}],
                     [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
                     [{"text": "📌 Закрепить", "callback_data": "show_pin_menu"}]
                 ]
@@ -1346,13 +1346,17 @@ class CurrencyMonitor:
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.show_main_menu(chat_id)
+                
             elif data == "show_timezone":
                 await self.show_timezone_menu(chat_id)
+                
             elif data == "show_pin_menu":
                 await self.show_pin_menu(chat_id)
+                
             elif data.startswith("tz_"):
                 tz_key = data.replace("tz_", "")
                 await self.set_user_timezone(chat_id, tz_key)
+                
             elif data.startswith("pin_toggle_"):
                 pair = data.replace("pin_toggle_", "")
                 user_id = str(chat_id)
@@ -1370,11 +1374,13 @@ class CurrencyMonitor:
                 
                 update_user_stats(chat_id, '', '', '', pinned_pairs=pinned_pairs)
                 
-                # Сразу возвращаемся в главное меню (без уведомлений)
+                # Сразу возвращаемся в главное меню
                 await self.show_main_menu(chat_id)
+                
             elif data.startswith("manage_"):
                 pair = data.replace("manage_", "")
                 await self.handle_pair_management(chat_id, pair)
+                
             elif data.startswith("delete_specific_"):
                 try:
                     parts = data.replace("delete_specific_", "").rsplit("_", 1)
@@ -1399,12 +1405,15 @@ class CurrencyMonitor:
                             
                             if not remaining_alerts:
                                 await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
-                                await self.handle_pair_management(chat_id, pair)
+                                # ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ - показываем главное меню, а не handle_pair_management
+                                await self.show_main_menu(chat_id)
                                 return
                 except Exception as e:
                     logger.error(f"Delete specific error: {e}")
                 
+                # Если остались алерты, показываем управление парой
                 await self.handle_pair_management(chat_id, pair)
+                
             elif data.startswith("delete_all_"):
                 pair = data.replace("delete_all_", "")
                 user_id = str(chat_id)
@@ -1417,8 +1426,10 @@ class CurrencyMonitor:
                     logger.info(f"Удалено {old_count} алертов для {pair} у пользователя {user_id}")
                     
                     await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
-                    await self.handle_pair_management(chat_id, pair)
+                    # ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ - показываем главное меню
+                    await self.show_main_menu(chat_id)
                     return
+                    
             elif data.startswith("add_"):
                 pair = data.replace("add_", "")
                 
@@ -1440,6 +1451,7 @@ class CurrencyMonitor:
                     f"📝 Введи целевую цену:",
                     cancel_keyboard
                 )
+                
             elif data == "collaboration":
                 collab_text = (
                     "📩 <b>Обратная связь</b>\n\n"
@@ -1447,17 +1459,15 @@ class CurrencyMonitor:
                     "✉️ Напиши @Maranafa2023 — добавим!\n\n"
                     "Спасибо, что пользуетесь ботом! 🚀"
                 )
-                
-                # Сначала отправляем сообщение
                 await self.send_telegram_message(chat_id, collab_text)
-                # И сразу показываем главное меню
-                await self.show_main_menu(chat_id) 
+                await self.show_main_menu(chat_id)
                 
             elif data == "cancel_alert":
                 if str(chat_id) in self.alert_states:
                     del self.alert_states[str(chat_id)]
                 await self.send_telegram_message(chat_id, "❌ Создание отменено")
                 await self.show_main_menu(chat_id)
+                
             elif data.startswith("delete_"):
                 try:
                     num = int(data.replace("delete_", "")) - 1
@@ -1634,6 +1644,7 @@ class CurrencyMonitor:
         logger.info(f"💰 При создании алерта показывается текущая цена")
         logger.info(f"📱 Главное меню: без цен, в два ряда, с флагами и эмодзи")
         logger.info(f"📌 Меню закрепления: в два ряда, с флагами и эмодзи")
+        logger.info(f"✅ В меню часовых поясов галочка у выбранного")
         if YFINANCE_AVAILABLE:
             logger.info(f"📈 Индексы и нефть: yfinance доступен")
         else:
