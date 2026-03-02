@@ -1294,7 +1294,7 @@ class CurrencyMonitor:
         except Exception as e:
             logger.error(f"Error in alert input: {e}")
             await self.send_telegram_message(chat_id, "❌ Ошибка при создании алерта")
-            await self.show_main_menu(chat_id)    
+            await self.show_main_menu(chat_id)   
             
     async def list_alerts(self, chat_id):
         user_id = str(chat_id)
