@@ -1042,19 +1042,21 @@ class CurrencyMonitor:
         
     async def show_main_menu(self, chat_id):
         """Главное меню со слоганом, индикаторами алертов и закреплений"""
-        rates = await self.fetch_rates()
-        if not rates:
-            keyboard = {
-                "inline_keyboard": [
-                    [{"text": "📩 Связь", "callback_data": "collaboration"}],
-                    [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
-                    [{"text": "📌 Закрепить", "callback_data": "show_pin_menu"}]
-                ]
-            }
-            slogan = get_user_slogan(chat_id)
-            await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
-            return
-        
+        try:
+            rates = await self.fetch_rates()
+            if not rates:
+                # Если нет курсов, показываем упрощённое меню
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "📩 Связь", "callback_data": "collaboration"}],
+                        [{"text": "🌍 Часовой пояс", "callback_data": "show_timezone"}],
+                        [{"text": "📌 Закрепить", "callback_data": "show_pin_menu"}]
+                    ]
+                }
+                slogan = get_user_slogan(chat_id)
+                await self.send_telegram_message_with_keyboard(chat_id, slogan, keyboard)
+                return    
+                
         user_id = str(chat_id)
         user_alerts_list = user_alerts.get(user_id, [])
         pinned_pairs = get_user_pinned_pairs(user_id)
@@ -1290,10 +1292,15 @@ class CurrencyMonitor:
         except ValueError:
             await self.send_telegram_message(chat_id, "❌ Это не число! Введи цену (например: 1.10)")
         except Exception as e:
-            logger.error(f"Error in alert input: {e}")
-            await self.send_telegram_message(chat_id, "❌ Ошибка при создании алерта")
-            await self.show_main_menu(chat_id)
-    
+                logger.error(f"Ошибка в show_main_menu: {e}")
+                # В случае ошибки показываем хотя бы простую клавиатуру
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "📩 Связь", "callback_data": "collaboration"}]
+                    ]
+                }
+                await self.send_telegram_message_with_keyboard(chat_id, "⚠️ Временные проблемы с курсами", keyboard)    
+                
     async def list_alerts(self, chat_id):
         user_id = str(chat_id)
         alerts = user_alerts.get(user_id, [])
