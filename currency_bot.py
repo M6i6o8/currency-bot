@@ -983,14 +983,14 @@ class CurrencyMonitor:
             return 'неизвестно'
         
         if pair in self.high_value_pairs:
-            return f"${price:,.2f}"
+            return f"${price:.2f}"  # Убрана запятая
         elif pair in self.low_value_pairs:
             return f"${price:.4f}"
         elif pair in self.currency_pairs:
             return f"{price:.4f}"
         else:
-            return f"${price:.2f}"
-    
+            return f"${price:.2f}"    
+            
     async def handle_pair_management(self, chat_id, pair):
         """Показывает меню управления для конкретной пары"""
         user_id = str(chat_id)
