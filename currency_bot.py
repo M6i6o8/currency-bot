@@ -1454,18 +1454,15 @@ class CurrencyMonitor:
                                                             a.get('active'))]
                             save_user_alerts(user_alerts)
                             
-                            remaining_alerts = [a for a in user_alerts[user_id] 
-                                               if a.get('pair') == pair and a.get('active')]
-                            
-                            if not remaining_alerts:
-                                await self.send_telegram_message(chat_id, f"✅ Все алерты для {pair} удалены")
-                                await self.show_main_menu(chat_id)
-                                return
+                            await self.send_telegram_message(chat_id, f"✅ Алерт удален")
+                            # ВСЕГДА показываем главное меню после удаления
+                            await self.show_main_menu(chat_id)
+                            return
                 except Exception as e:
                     logger.error(f"Delete specific error: {e}")
                 
-                # Если остались алерты, показываем управление парой
-                await self.handle_pair_management(chat_id, pair)
+                # Если что-то пошло не так, тоже показываем главное меню
+                await self.show_main_menu(chat_id) 
                 
             elif data.startswith("delete_all_"):
                 pair = data.replace("delete_all_", "")
