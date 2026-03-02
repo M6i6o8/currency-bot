@@ -1519,11 +1519,12 @@ class CurrencyMonitor:
                     if user_id in user_alerts and 0 <= num < len(user_alerts[user_id]):
                         user_alerts[user_id].pop(num)
                         save_user_alerts(user_alerts)
-                        await self.send_telegram_message(chat_id, f"✅ Алерт {num+1} удален")
-                        await self.list_alerts(chat_id)
+                        await self.send_telegram_message(chat_id, f"✅ Алерт удален")
+                        # Сразу показываем главное меню
+                        await self.show_main_menu(chat_id)
                 except Exception as e:
                     logger.error(f"Delete error: {e}")
-                    await self.show_main_menu(chat_id)
+                    await self.show_main_menu(chat_id)  
                     
         except Exception as e:
             logger.error(f"Callback error: {e}")
