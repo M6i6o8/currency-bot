@@ -1292,15 +1292,10 @@ class CurrencyMonitor:
         except ValueError:
             await self.send_telegram_message(chat_id, "❌ Это не число! Введи цену (например: 1.10)")
         except Exception as e:
-                logger.error(f"Ошибка в show_main_menu: {e}")
-                # В случае ошибки показываем хотя бы простую клавиатуру
-                keyboard = {
-                    "inline_keyboard": [
-                        [{"text": "📩 Связь", "callback_data": "collaboration"}]
-                    ]
-                }
-                await self.send_telegram_message_with_keyboard(chat_id, "⚠️ Временные проблемы с курсами", keyboard)    
-                
+            logger.error(f"Error in alert input: {e}")
+            await self.send_telegram_message(chat_id, "❌ Ошибка при создании алерта")
+            await self.show_main_menu(chat_id)    
+            
     async def list_alerts(self, chat_id):
         user_id = str(chat_id)
         alerts = user_alerts.get(user_id, [])
