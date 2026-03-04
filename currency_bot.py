@@ -1592,7 +1592,15 @@ class CurrencyMonitor:
                             f"🎯 Цель: {target:.2f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
-                        notifications.append((int(user_id), msg))
+                        
+                        # Создаем клавиатуру с кнопкой ОК
+                        ok_keyboard = {
+                            "inline_keyboard": [
+                                [{"text": "✅ ОК", "callback_data": "main_menu"}]
+                            ]
+                        }
+                        
+                        notifications.append((int(user_id), msg, ok_keyboard))
                         alert['active'] = False
                         
                         if user_id in stats:
@@ -1609,7 +1617,15 @@ class CurrencyMonitor:
                             f"🎯 Цель: {target:.4f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
-                        notifications.append((int(user_id), msg))
+                        
+                        # Создаем клавиатуру с кнопкой ОК
+                        ok_keyboard = {
+                            "inline_keyboard": [
+                                [{"text": "✅ ОК", "callback_data": "main_menu"}]
+                            ]
+                        }
+                        
+                        notifications.append((int(user_id), msg, ok_keyboard))
                         alert['active'] = False
                         
                         if user_id in stats:
@@ -1626,7 +1642,15 @@ class CurrencyMonitor:
                             f"🎯 Цель: {target:.5f}\n"
                             f"⏱️ {current_time} ({tz_info['name']})"
                         )
-                        notifications.append((int(user_id), msg))
+                        
+                        # Создаем клавиатуру с кнопкой ОК
+                        ok_keyboard = {
+                            "inline_keyboard": [
+                                [{"text": "✅ ОК", "callback_data": "main_menu"}]
+                            ]
+                        }
+                        
+                        notifications.append((int(user_id), msg, ok_keyboard))
                         alert['active'] = False
                         
                         if user_id in stats:
@@ -1637,21 +1661,21 @@ class CurrencyMonitor:
         
         save_user_stats(stats)
         return notifications
-    
+        
     async def check_rates_task(self, interval=10):
         while True:
             try:
                 rates = await self.fetch_rates()
                 if rates:
                     notifications = await self.check_thresholds(rates)
-                    for chat_id, msg in notifications:
+                    for chat_id, msg, keyboard in notifications:
                         if self.is_user_allowed(chat_id):
-                            await self.send_telegram_message(chat_id, msg)
+                            await self.send_telegram_message_with_keyboard(chat_id, msg, keyboard)
                 await asyncio.sleep(interval)
             except Exception as e:
                 logger.error(f"Rates task error: {e}")
-                await asyncio.sleep(interval)
-    
+                await asyncio.sleep(interval) 
+            
     async def check_commands_task(self, interval=2):
         while True:
             try:
